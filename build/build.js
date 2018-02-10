@@ -9,16 +9,18 @@ const spawnSync = require('child_process').spawnSync;
 
 const config = require('./build-config.json');
 const anglePath = 'angle/';
-const translatorSrc = 'angle/samples/shader_translator/shader_translator.cpp';
+const translatorSrc = 'src/shader-translator.cpp';
 
 const EMSDK_INIT = 'source ./emsdk/emsdk_env.sh';
 const BUILD_ECHO = 'echo Comipling translator...';
 const COMPILER = 'emcc';
 const OUTPUT_ARGS = [
-  '-o', 'translator.html',
-  '--preload-file', 'aq-fish-nm.frag',
+  '-o', 'translator.js',
+  '--embed-file', 'aq-fish-nm.frag',
   '-Os',
   '-s', 'WASM=1',
+  '-s', 'MODULARIZE=1',
+  '-s', 'INVOKE_RUN=0',
 ];
 
 function run() {

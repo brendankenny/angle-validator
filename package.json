@@ -6,7 +6,8 @@
   "scripts": {
     "gen": "cd angle && gn gen out/json --args=\"angle_enable_hlsl=true is_debug=false\" --ide=json && yarn extract-sources",
     "extract-sources": "node ./build/extract-sources.js",
-    "build": "node ./build/build.js"
+    "build": "node ./build/build.js",
+    "test": "node ./test/groundtruth/compare.js"
   },
   "repository": {
     "type": "git",
