@@ -16,7 +16,8 @@ const BUILD_ECHO = 'echo Comipling translator...';
 const COMPILER = 'emcc';
 const OUTPUT_ARGS = [
   '-o', 'translator.js',
-  '--embed-file', 'aq-fish-nm.frag',
+  '--embed-file', 'test/groundtruth/shaders/aq-fish-nm.frag',
+  '--embed-file', 'test/groundtruth/shaders/multiview.vert',
   '-Os',
   '-s', 'WASM=1',
   '-s', 'MODULARIZE=1',
