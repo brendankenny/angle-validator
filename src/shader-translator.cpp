@@ -6,11 +6,10 @@
 
 #include "GLSLANG/ShaderLang.h"
 
-#include <assert.h>
 #include <math.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <regex>
 #include <sstream>
 #include <vector>
 #include "angle_gl.h"
@@ -26,20 +25,114 @@ enum TFailCode
     EFailCompilerCreate,
 };
 
+const std::string aqFishFrag = R"(/**
+ * Copyright 2009 Google Inc. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+// https://github.com/WebGLSamples/WebGLSamples.github.io/tree/42019d791baffe5d7b88eadfad404f80553025e8/aquarium
+
+precision mediump float;
+uniform vec4 lightColor;
+varying vec4 v_position;
+varying vec2 v_texCoord;
+varying vec3 v_tangent;  // #normalMap
+varying vec3 v_binormal;  // #normalMap
+varying vec3 v_normal;
+varying vec3 v_surfaceToLight;
+varying vec3 v_surfaceToView;
+
+uniform vec4 ambient;
+uniform sampler2D diffuse;
+uniform vec4 specular;
+uniform sampler2D normalMap;  // #normalMap
+uniform float shininess;
+uniform float specularFactor;
+// #fogUniforms
+
+vec4 lit(float l ,float h, float m) {
+  return vec4(1.0,
+              max(l, 0.0),
+              (l > 0.0) ? pow(max(0.0, h), m) : 0.0,
+              1.0);
+}
+void main() {
+  vec4 diffuseColor = texture2D(diffuse, v_texCoord);
+  mat3 tangentToWorld = mat3(v_tangent,  // #normalMap
+                             v_binormal,  // #normalMap
+                             v_normal);  // #normalMap
+  vec4 normalSpec = texture2D(normalMap, v_texCoord.xy);  // #normalMap
+  vec3 tangentNormal = normalSpec.xyz - vec3(0.5, 0.5, 0.5);  // #normalMap
+  tangentNormal = normalize(tangentNormal + vec3(0, 0, 2));  // #normalMap
+  vec3 normal = (tangentToWorld * tangentNormal);  // #normalMap
+  normal = normalize(normal);  // #normalMap
+  vec3 surfaceToLight = normalize(v_surfaceToLight);
+  vec3 surfaceToView = normalize(v_surfaceToView);
+  vec3 halfVector = normalize(surfaceToLight + surfaceToView);
+  vec4 litR = lit(dot(normal, surfaceToLight),
+                    dot(normal, halfVector), shininess);
+  vec4 outColor = vec4(
+    (lightColor * (diffuseColor * litR.y + diffuseColor * ambient +
+                  specular * litR.z * specularFactor * normalSpec.a)).rgb,
+      diffuseColor.a);
+  // #fogCode
+  gl_FragColor = outColor;
+}
+)";
+
+const std::string multiVert = R"(#version 300 es
+
+/**
+ * Copyright (c) 2017 The ANGLE Project Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file.
+ */
+
+// https://github.com/google/angle/blob/8f27b05092640bde80e8a1e6bda9f364f7921960/samples/multiview/Multiview.cpp
+
+#extension GL_OVR_multiview : require
+
+layout(num_views = 2) in;
+layout(location=0) in vec3 posIn;
+layout(location=1) in vec3 normalIn;
+
+uniform mat4 uPerspective;
+uniform mat4 uCameraLeftEye;
+uniform mat4 uCameraRightEye;
+uniform mat4 uTranslation;
+
+out vec3 oNormal;
+
+void main()
+{
+  vec4 p = uTranslation * vec4(posIn,1.);
+  if (gl_ViewID_OVR == 0u) {
+    p = uCameraLeftEye * p;
+  } else {
+    p = uCameraRightEye * p;
+  }
+  oNormal = normalIn;
+  gl_Position = uPerspective * p;
+}
+)";
+
 static void usage();
 static sh::GLenum FindShaderType(const char *fileName);
 static bool CompileFile(char *fileName, ShHandle compiler, ShCompileOptions compileOptions);
 static void LogMsg(const char *msg, const char *name, const int num, const char *logName);
 static void PrintVariable(const std::string &prefix, size_t index, const sh::ShaderVariable &var);
 static void PrintActiveVariables(ShHandle compiler);
-
-// If NUM_SOURCE_STRINGS is set to a value > 1, the input file data is
-// broken into that many chunks. This will affect file/line numbering in
-// the preprocessor.
-const unsigned int NUM_SOURCE_STRINGS = 1;
-typedef std::vector<char *> ShaderSource;
-static bool ReadShaderSource(const char *fileName, ShaderSource &source);
-static void FreeShaderSource(ShaderSource &source);
 
 static bool ParseGLSLOutputVersion(const std::string &, ShShaderOutput *outResult);
 static bool ParseIntValue(const std::string &, int emptyDefault, int *outValue);
@@ -385,7 +478,6 @@ void usage()
 //
 sh::GLenum FindShaderType(const char *fileName)
 {
-    assert(fileName);
 
     const char *ext = strrchr(fileName, '.');
 
@@ -413,14 +505,25 @@ sh::GLenum FindShaderType(const char *fileName)
 //
 bool CompileFile(char *fileName, ShHandle compiler, ShCompileOptions compileOptions)
 {
-    ShaderSource source;
-    if (!ReadShaderSource(fileName, source))
+    std::regex aqFishRegex(R"(aq-fish-nm\.frag$)");
+    std::regex multiRegex(R"(multiview\.vert$)");
+    const char *source;
+
+    if (std::regex_search(fileName, aqFishRegex))
+    {
+        source = aqFishFrag.c_str();
+    }
+    else if (std::regex_search(fileName, multiRegex))
+    {
+        source = multiVert.c_str();
+    }
+    else
+    {
+        printf("Error: unable to open input file: %s\n", fileName);
         return false;
+    }
 
-    int ret = sh::Compile(compiler, &source[0], source.size(), compileOptions);
-
-    FreeShaderSource(source);
-    return ret ? true : false;
+    return sh::Compile(compiler, &source, 1, compileOptions);
 }
 
 void LogMsg(const char *msg, const char *name, const int num, const char *logName)
@@ -635,49 +738,6 @@ static void PrintActiveVariables(ShHandle compiler)
         }
         printf("\n");
     }
-}
-
-static bool ReadShaderSource(const char *fileName, ShaderSource &source)
-{
-    FILE *in = fopen(fileName, "rb");
-    if (!in)
-    {
-        printf("Error: unable to open input file: %s\n", fileName);
-        return false;
-    }
-
-    // Obtain file size.
-    fseek(in, 0, SEEK_END);
-    size_t count = ftell(in);
-    rewind(in);
-
-    int len = (int)ceil((float)count / (float)NUM_SOURCE_STRINGS);
-    source.reserve(NUM_SOURCE_STRINGS);
-    // Notice the usage of do-while instead of a while loop here.
-    // It is there to handle empty files in which case a single empty
-    // string is added to vector.
-    do
-    {
-        char *data = new char[len + 1];
-        size_t nread = fread(data, 1, len, in);
-        data[nread] = '\0';
-        source.push_back(data);
-
-        count -= nread;
-    }
-    while (count > 0);
-
-    fclose(in);
-    return true;
-}
-
-static void FreeShaderSource(ShaderSource &source)
-{
-    for (ShaderSource::size_type i = 0; i < source.size(); ++i)
-    {
-        delete [] source[i];
-    }
-    source.clear();
 }
 
 static bool ParseGLSLOutputVersion(const std::string &num, ShShaderOutput *outResult)

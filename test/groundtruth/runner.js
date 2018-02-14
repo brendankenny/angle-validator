@@ -7,12 +7,12 @@
 
 const path = require('path');
 
-// look for latest build of translator
+// look for latest build of validator
 const dir = path.resolve(__dirname, '../../');
 
 process.chdir(dir);
-const translator = require(path.resolve(dir, './translator.js'));
-translator().then(translatorModule => {
+const validator = require(path.resolve(dir, './validator.js'));
+validator().then(validatorModule => {
   // call main() with argv
-  translatorModule.callMain(process.argv.slice(2));
+  validatorModule.callMain(process.argv.slice(2));
 });

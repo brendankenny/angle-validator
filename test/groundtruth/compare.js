@@ -59,9 +59,9 @@ function formatNumber(number, decimalPlaces = 0) {
 }
 
 async function runGroundTruthCommand(cmd) {
-  const gtPath = path.resolve(__dirname, './translator.js');
   try {
-    const output = await execAsync(`node ${gtPath} ${cmd}`, {encoding: 'utf8'});
+    // eslint-disable-next-line max-len
+    const output = await execAsync(`cd ${__dirname} && node translator.js ${cmd}`, {encoding: 'utf8'});
     return output.stdout;
   } catch (e) {
     return e.stdout;
@@ -81,8 +81,8 @@ async function runHeadCommand(cmd) {
 async function run() {
   console.log('Sizes:');
   console.log('head:');
-  const headWasmSize = fs.statSync(path.resolve(__dirname, '../../translator.wasm')).size;
-  const headJsSize = fs.statSync(path.resolve(__dirname, '../../translator.js')).size;
+  const headWasmSize = fs.statSync(path.resolve(__dirname, '../../validator.wasm')).size;
+  const headJsSize = fs.statSync(path.resolve(__dirname, '../../validator.js')).size;
   console.log(`  wasm: ${formatNumber(headWasmSize)} bytes`);
   console.log(`  js: ${formatNumber(headJsSize)} bytes`);
 
