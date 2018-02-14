@@ -1,6 +1,8 @@
 # angle-validator
 
-## Build (Mac/Linux)
+A working build is shipped in `out/`. Installation and (re)building is only necessary if modifying source.
+
+## Init and Build (Mac/Linux)
 1. `git clone https://github.com/brendankenny/angle-validator.git`
 2. Download, install, and activate the [Emscripten SDK](https://kripken.github.io/emscripten-site/docs/getting_started/downloads.html)
     ```sh
@@ -24,4 +26,6 @@ Occasionally, will need to regenerate list of source files and compile flags as 
 3. Compare to checked-in build config (`git diff build/build-config.json`)
 4. `yarn build` if needed
 
+## Update test expectations
+1. `yarn build --gt`
 

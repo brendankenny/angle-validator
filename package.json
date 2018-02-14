@@ -25,7 +25,8 @@
   },
   "homepage": "https://github.com/brendankenny/angle-validator#readme",
   "devDependencies": {
-    "eslint": "^4.17.0",
-    "eslint-config-google": "^0.9.1"
+    "eslint": "4.17.0",
+    "eslint-config-google": "0.9.1",
+    "mkdirp": "0.5.1"
   }
 }

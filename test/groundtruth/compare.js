@@ -81,8 +81,8 @@ async function runHeadCommand(cmd) {
 async function run() {
   console.log('Sizes:');
   console.log('head:');
-  const headWasmSize = fs.statSync(path.resolve(__dirname, '../../validator.wasm')).size;
-  const headJsSize = fs.statSync(path.resolve(__dirname, '../../validator.js')).size;
+  const headWasmSize = fs.statSync(path.resolve(__dirname, '../../out/validator.wasm')).size;
+  const headJsSize = fs.statSync(path.resolve(__dirname, '../../out/validator.js')).size;
   console.log(`  wasm: ${formatNumber(headWasmSize)} bytes`);
   console.log(`  js: ${formatNumber(headJsSize)} bytes`);
 
