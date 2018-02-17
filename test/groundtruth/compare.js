@@ -98,8 +98,9 @@ async function run() {
     const headOutput = await runHeadCommand(test.cmd);
     const gtOutput = await runGroundTruthCommand(test.cmd);
 
-    assert(test.check.test(headOutput));
     assert(headOutput.length > 0);
+    assert(test.check.test(headOutput));
+    assert.strictEqual(headOutput.length, gtOutput.length);
     assert.strictEqual(headOutput, gtOutput);
   }
 

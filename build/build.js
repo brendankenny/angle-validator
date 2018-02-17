@@ -25,6 +25,8 @@ const OUTPUT_ARGS = [
   '-s', 'MODULARIZE=1',
   '-s', 'INVOKE_RUN=0',
   '-s', 'NO_FILESYSTEM=1',
+  '-s', 'EXPORTED_FUNCTIONS=[\\"_ValidateShader\\"]',
+  '--pre-js', 'src/pre-module.js',
   // '-g2', // retain function names for debugging
 ];
 

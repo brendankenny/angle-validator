@@ -129,13 +129,15 @@ void main()
 
 static void usage();
 static sh::GLenum FindShaderType(const char *fileName);
-static bool CompileFile(char *fileName, ShHandle compiler, ShCompileOptions compileOptions);
+static bool CompileFile(const char *fileName, ShHandle compiler, ShCompileOptions compileOptions);
 static void LogMsg(const char *msg, const char *name, const int num, const char *logName);
 static void PrintVariable(const std::string &prefix, size_t index, const sh::ShaderVariable &var);
 static void PrintActiveVariables(ShHandle compiler);
 
 static bool ParseGLSLOutputVersion(const std::string &, ShShaderOutput *outResult);
 static bool ParseIntValue(const std::string &, int emptyDefault, int *outValue);
+
+std::string logString;
 
 //
 // Set up the per compile resources
@@ -159,7 +161,7 @@ void GenerateResources(ShBuiltInResources *resources)
     resources->EXT_geometry_shader      = 1;
 }
 
-int main(int argc, char *argv[])
+int InternalValidate(int argc, const char *argv[])
 {
     TFailCode failCode = ESuccess;
 
@@ -379,24 +381,24 @@ int main(int argc, char *argv[])
 
                 LogMsg("BEGIN", "COMPILER", numCompiles, "INFO LOG");
                 std::string log = sh::GetInfoLog(compiler);
-                puts(log.c_str());
+                logString += log + "\n";
                 LogMsg("END", "COMPILER", numCompiles, "INFO LOG");
-                printf("\n\n");
+                logString += "\n\n";
 
                 if (compiled && (compileOptions & SH_OBJECT_CODE))
                 {
                     LogMsg("BEGIN", "COMPILER", numCompiles, "OBJ CODE");
                     std::string code = sh::GetObjectCode(compiler);
-                    puts(code.c_str());
+                    logString += code + "\n";
                     LogMsg("END", "COMPILER", numCompiles, "OBJ CODE");
-                    printf("\n\n");
+                    logString += "\n\n";
                 }
                 if (compiled && (compileOptions & SH_VARIABLES))
                 {
                     LogMsg("BEGIN", "COMPILER", numCompiles, "VARIABLES");
                     PrintActiveVariables(compiler);
                     LogMsg("END", "COMPILER", numCompiles, "VARIABLES");
-                    printf("\n\n");
+                    logString += "\n\n";
                 }
                 if (!compiled)
                   failCode = EFailCompile;
@@ -429,13 +431,43 @@ int main(int argc, char *argv[])
     return failCode;
 }
 
+// Prevent name mangling for easy emscripten linking.
+extern "C" {
+    int ValidateShader(const char *args, char **printLog) {
+        // super basic split on spaces
+        std::stringstream ss(args);
+        std::string item;
+        std::vector<std::string> splitArgs = {"./shader-validator.cpp"};
+        char delim = ' ';
+        while (std::getline(ss, item, delim)) {
+            splitArgs.push_back(std::move(item));
+        }
+
+        std::vector<const char*> argv;
+        for (const auto& arg : splitArgs) {
+            argv.push_back(arg.c_str());
+        }
+        argv.push_back(nullptr);
+
+        int ret = InternalValidate(argv.size() - 1, argv.data());
+
+        // print accumulated log
+        char *p = (char*)malloc(sizeof(char) * (logString.size() + 1));
+        strcpy(p, logString.c_str());
+        logString.clear();
+        *printLog = p;
+
+        return ret;
+    }
+}
+
 //
 //   print usage to stdout
 //
 void usage()
 {
     // clang-format off
-    printf(
+    logString +=
         "Usage: translate [-i -o -u -l -p -b=e -b=g -b=h9 -x=i -x=d] file1 file2 ...\n"
         "Where: filename : filename ending in .frag or .vert\n"
         "       -i       : print intermediate tree\n"
@@ -465,7 +497,7 @@ void usage()
         "       -x=n     : enable NV_shader_framebuffer_fetch\n"
         "       -x=a     : enable ARM_shader_framebuffer_fetch\n"
         "       -x=m     : enable OVR_multiview\n"
-        "       -x=y     : enable YUV_target\n");
+        "       -x=y     : enable YUV_target\n";
     // clang-format on
 }
 
@@ -503,7 +535,7 @@ sh::GLenum FindShaderType(const char *fileName)
 //
 //   Read a file's data into a string, and compile it using sh::Compile
 //
-bool CompileFile(char *fileName, ShHandle compiler, ShCompileOptions compileOptions)
+bool CompileFile(const char *fileName, ShHandle compiler, ShCompileOptions compileOptions)
 {
     std::regex aqFishRegex(R"(aq-fish-nm\.frag$)");
     std::regex multiRegex(R"(multiview\.vert$)");
@@ -519,7 +551,9 @@ bool CompileFile(char *fileName, ShHandle compiler, ShCompileOptions compileOpti
     }
     else
     {
-        printf("Error: unable to open input file: %s\n", fileName);
+        logString += "Error: unable to open input file: ";
+        logString += fileName;
+        logString += "\n";
         return false;
     }
 
@@ -528,7 +562,13 @@ bool CompileFile(char *fileName, ShHandle compiler, ShCompileOptions compileOpti
 
 void LogMsg(const char *msg, const char *name, const int num, const char *logName)
 {
-    printf("#### %s %s %d %s ####\n", msg, name, num, logName);
+    logString += "#### ";
+    logString += msg;
+    logString += " ";
+    logString += name;
+    logString += " " + std::to_string(num) + " ";
+    logString += logName;
+    logString += " ####\n";
 }
 
 void PrintVariable(const std::string &prefix, size_t index, const sh::ShaderVariable &var)
@@ -663,20 +703,20 @@ void PrintVariable(const std::string &prefix, size_t index, const sh::ShaderVari
       default: typeName = "UNKNOWN"; break;
     }
 
-    printf("%s %u : name=%s, mappedName=%s, type=%s, arraySizes=", prefix.c_str(),
-           static_cast<unsigned int>(index), var.name.c_str(), var.mappedName.c_str(),
-           typeName.c_str());
+    logString += prefix + " " + std::to_string(static_cast<unsigned int>(index));
+    logString += " : name=" + var.name + ", mappedName=" + var.mappedName;
+    logString += ", type=" + typeName + ", arraySizes=";
     for (unsigned int arraySize : var.arraySizes)
     {
-        printf("%u ", arraySize);
+        logString += std::to_string(arraySize) + " ";
     }
-    printf("\n");
+    logString += "\n";
     if (var.fields.size())
     {
         std::string structPrefix;
         for (size_t i = 0; i < prefix.size(); ++i)
             structPrefix += ' ';
-        printf("%s  struct %s\n", structPrefix.c_str(), var.structName.c_str());
+        logString += structPrefix + "  struct " + var.structName + "\n";
         structPrefix += "    field";
         for (size_t i = 0; i < var.fields.size(); ++i)
             PrintVariable(structPrefix, i, var.fields[i]);
@@ -736,7 +776,7 @@ static void PrintActiveVariables(ShHandle compiler)
 
             PrintVariable(varCategoryName, i, *var);
         }
-        printf("\n");
+        logString += "\n";
     }
 }
 
