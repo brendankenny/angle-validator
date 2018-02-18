@@ -13,7 +13,7 @@ Module.locateFile = function(filename) {
     return require('path').resolve(__dirname, filename);
   }
 
-  // TODO(bckenny): resolve on web
+  // TODO(bckenny): resolve on web?
   return filename;
 };
 

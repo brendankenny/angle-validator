@@ -13,19 +13,31 @@ A working build is shipped in `out/`. Installation and (re)building is only nece
 3. `git clone https://chromium.googlesource.com/angle/angle` (TODO: lock version)
 4. `yarn build`
 
+## Test
+`yarn test`
+
 ## Update source list
 Occasionally, will need to regenerate list of source files and compile flags as ANGLE is updated.
-1. [initialize ANGLE](https://github.com/google/angle/blob/master/doc/DevSetup.md#getting-the-source)
+1. Check for changes to shader translator sample
+    ```sh
+    cd angle
+    git fetch
+    git diff origin/master -R -- samples/shader_translator/shader_translator.cpp
+    git diff origin/master -R # optional, will be very large
+    git pull # if desired
+    cd ..
+    ```
+2. If update needed, [initialize ANGLE](https://github.com/google/angle/blob/master/doc/DevSetup.md#getting-the-source)
     ```sh
     cd angle
     python scripts/bootstrap.py
     gclient sync
     cd ..
     ```
-2. `yarn gen`
-3. Compare to checked-in build config (`git diff build/build-config.json`)
-4. `yarn build` if needed
+3. `yarn gen`
+4. Compare to checked-in build config (`git diff build/build-config.json`)
+5. `yarn build` if code or build changes necessitate
 
-## Update test expectations
+## Update test expectation binary
+If ANGLE is updated, should update test expectation generator from ANGLE source.
 1. `yarn build --gt`
-
