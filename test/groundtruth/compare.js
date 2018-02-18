@@ -9,8 +9,9 @@ const path = require('path');
 const fs = require('fs');
 const promisify = require('util').promisify;
 const execAsync = promisify(require('child_process').exec);
-
 const assert = require('assert');
+
+const headValidatorModule = require('../../out/validator.js');
 
 const tests = [
   {
@@ -58,20 +59,21 @@ function formatNumber(number, decimalPlaces = 0) {
   return number.toLocaleString(undefined, {maximumFractionDigits: decimalPlaces});
 }
 
+async function getHeadValidator() {
+  return new Promise(resolve => {
+    // Note: has then() but not a promise!
+    headValidatorModule().then(instance => {
+      // see https://github.com/kripken/emscripten/issues/5820
+      instance.then = undefined;
+      resolve(instance);
+    });
+  });
+}
+
 async function runGroundTruthCommand(cmd) {
   try {
     // eslint-disable-next-line max-len
     const output = await execAsync(`cd ${__dirname} && node translator.js ${cmd}`, {encoding: 'utf8'});
-    return output.stdout;
-  } catch (e) {
-    return e.stdout;
-  }
-}
-
-async function runHeadCommand(cmd) {
-  const runnerPath = path.resolve(__dirname, './runner.js');
-  try {
-    const output = await execAsync(`node ${runnerPath} ${cmd}`, {encoding: 'utf8'});
     return output.stdout;
   } catch (e) {
     return e.stdout;
@@ -92,10 +94,12 @@ async function run() {
   console.log(`  wasm: ${formatNumber(origWasmSize)} bytes`);
   console.log(`  js: ${formatNumber(origJsSize)} bytes`);
 
+  const head = await getHeadValidator();
+
   for (const test of tests) {
     console.log('checking command `' + test.cmd + '`...');
 
-    const headOutput = await runHeadCommand(test.cmd);
+    const headOutput = await head.validateShader(test.cmd);
     const gtOutput = await runGroundTruthCommand(test.cmd);
 
     assert(headOutput.length > 0);
