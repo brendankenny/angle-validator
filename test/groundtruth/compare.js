@@ -99,7 +99,9 @@ async function run() {
   for (const test of tests) {
     console.log('checking command `' + test.cmd + '`...');
 
-    const headOutput = await head.validateShader(test.cmd);
+    const shaderType = test.cmd.endsWith('.vert') ?
+      head.GL_VERTEX_SHADER : head.GL_FRAGMENT_SHADER;
+    const headOutput = await head.validateShader(shaderType, test.cmd);
     const gtOutput = await runGroundTruthCommand(test.cmd);
 
     assert(headOutput.length > 0);

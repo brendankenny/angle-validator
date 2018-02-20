@@ -128,7 +128,6 @@ void main()
 )";
 
 static void usage();
-static sh::GLenum FindShaderType(const char *fileName);
 static bool CompileFile(const char *fileName, ShHandle compiler, ShCompileOptions compileOptions);
 static void LogMsg(const char *msg, const char *name, const int num, const char *logName);
 static void PrintVariable(const std::string &prefix, size_t index, const sh::ShaderVariable &var);
@@ -161,7 +160,7 @@ void GenerateResources(ShBuiltInResources *resources)
     resources->EXT_geometry_shader      = 1;
 }
 
-int InternalValidate(int argc, const char *argv[])
+int InternalValidate(const sh::GLenum shaderType, int argc, const char *argv[])
 {
     TFailCode failCode = ESuccess;
 
@@ -339,7 +338,7 @@ int InternalValidate(int argc, const char *argv[])
                 resources.MaxTextureImageUnits       = 16;
             }
             ShHandle compiler = 0;
-            switch (FindShaderType(argv[0]))
+            switch (shaderType)
             {
               case GL_VERTEX_SHADER:
                 if (vertexCompiler == 0)
@@ -433,7 +432,7 @@ int InternalValidate(int argc, const char *argv[])
 
 // Prevent name mangling for easy emscripten linking.
 extern "C" {
-    int ValidateShader(const char *args, char **printLog) {
+    int ValidateShader(const sh::GLenum shaderType, const char *args, char **printLog) {
         // super basic split on spaces
         std::stringstream ss(args);
         std::string item;
@@ -449,7 +448,7 @@ extern "C" {
         }
         argv.push_back(nullptr);
 
-        int ret = InternalValidate(argv.size() - 1, argv.data());
+        int ret = InternalValidate(shaderType, argv.size() - 1, argv.data());
 
         // print accumulated log
         char *p = (char*)malloc(sizeof(char) * (logString.size() + 1));
@@ -499,37 +498,6 @@ void usage()
         "       -x=m     : enable OVR_multiview\n"
         "       -x=y     : enable YUV_target\n";
     // clang-format on
-}
-
-//
-//   Deduce the shader type from the filename.  Files must end in one of the
-//   following extensions:
-//
-//   .frag*    = fragment shader
-//   .vert*    = vertex shader
-//
-sh::GLenum FindShaderType(const char *fileName)
-{
-
-    const char *ext = strrchr(fileName, '.');
-
-    if (ext && strcmp(ext, ".sl") == 0)
-        for (; ext > fileName && ext[0] != '.'; ext--);
-
-    ext = strrchr(fileName, '.');
-    if (ext)
-    {
-        if (strncmp(ext, ".frag", 5) == 0)
-            return GL_FRAGMENT_SHADER;
-        if (strncmp(ext, ".vert", 5) == 0)
-            return GL_VERTEX_SHADER;
-        if (strncmp(ext, ".comp", 5) == 0)
-            return GL_COMPUTE_SHADER;
-        if (strncmp(ext, ".geom", 5) == 0)
-            return GL_GEOMETRY_SHADER_EXT;
-    }
-
-    return GL_FRAGMENT_SHADER;
 }
 
 //
