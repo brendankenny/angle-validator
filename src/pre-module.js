@@ -29,18 +29,21 @@ Module.locateFile = function(filename) {
 };
 
 /**
+ * @param {string} shaderSrc
  * @param {number=} shaderType
  * @param {string} argv
  * @return {string} output of validator.
  */
-Module.validateShader = function(shaderType, argv) {
+Module.validateShader = function(shaderSrc, shaderType, argv) {
   shaderType = shaderType || GL_FRAGMENT_SHADER;
 
   // manually allocate slot for the resulting pointer
   const printLoc = _malloc(4);
   setValue(printLoc, 0, '*');
 
-  ccall('ValidateShader', 'number', ['number', 'string', 'number'], [shaderType, argv, printLoc]);
+  ccall('ValidateShader', 'number',
+      ['string', 'number', 'string', 'number'],
+      [shaderSrc, shaderType, argv, printLoc]);
 
   const printLogLoc = getValue(printLoc, '*');
   // eslint-disable-next-line new-cap

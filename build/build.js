@@ -85,6 +85,8 @@ function run(src = validatorSrc, outputArgs = OUTPUT_ARGS) {
 
 if (process.argv.includes('--gt')) {
   run(gtSrc, GT_OUTPUT_ARGS);
+} else if (process.argv.includes('--quick')) {
+  run(validatorSrc, OUTPUT_ARGS.map(arg => /^-O[\dsz]$/.test(arg) ? '-O1' : arg));
 } else {
   run();
 }

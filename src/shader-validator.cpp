@@ -25,110 +25,7 @@ enum TFailCode
     EFailCompilerCreate,
 };
 
-const std::string aqFishFrag = R"(/**
- * Copyright 2009 Google Inc. All Rights Reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-// https://github.com/WebGLSamples/WebGLSamples.github.io/tree/42019d791baffe5d7b88eadfad404f80553025e8/aquarium
-
-precision mediump float;
-uniform vec4 lightColor;
-varying vec4 v_position;
-varying vec2 v_texCoord;
-varying vec3 v_tangent;  // #normalMap
-varying vec3 v_binormal;  // #normalMap
-varying vec3 v_normal;
-varying vec3 v_surfaceToLight;
-varying vec3 v_surfaceToView;
-
-uniform vec4 ambient;
-uniform sampler2D diffuse;
-uniform vec4 specular;
-uniform sampler2D normalMap;  // #normalMap
-uniform float shininess;
-uniform float specularFactor;
-// #fogUniforms
-
-vec4 lit(float l ,float h, float m) {
-  return vec4(1.0,
-              max(l, 0.0),
-              (l > 0.0) ? pow(max(0.0, h), m) : 0.0,
-              1.0);
-}
-void main() {
-  vec4 diffuseColor = texture2D(diffuse, v_texCoord);
-  mat3 tangentToWorld = mat3(v_tangent,  // #normalMap
-                             v_binormal,  // #normalMap
-                             v_normal);  // #normalMap
-  vec4 normalSpec = texture2D(normalMap, v_texCoord.xy);  // #normalMap
-  vec3 tangentNormal = normalSpec.xyz - vec3(0.5, 0.5, 0.5);  // #normalMap
-  tangentNormal = normalize(tangentNormal + vec3(0, 0, 2));  // #normalMap
-  vec3 normal = (tangentToWorld * tangentNormal);  // #normalMap
-  normal = normalize(normal);  // #normalMap
-  vec3 surfaceToLight = normalize(v_surfaceToLight);
-  vec3 surfaceToView = normalize(v_surfaceToView);
-  vec3 halfVector = normalize(surfaceToLight + surfaceToView);
-  vec4 litR = lit(dot(normal, surfaceToLight),
-                    dot(normal, halfVector), shininess);
-  vec4 outColor = vec4(
-    (lightColor * (diffuseColor * litR.y + diffuseColor * ambient +
-                  specular * litR.z * specularFactor * normalSpec.a)).rgb,
-      diffuseColor.a);
-  // #fogCode
-  gl_FragColor = outColor;
-}
-)";
-
-const std::string multiVert = R"(#version 300 es
-
-/**
- * Copyright (c) 2017 The ANGLE Project Authors. All rights reserved.
- * Use of this source code is governed by a BSD-style license that can be
- * found in the LICENSE file.
- */
-
-// https://github.com/google/angle/blob/8f27b05092640bde80e8a1e6bda9f364f7921960/samples/multiview/Multiview.cpp
-
-#extension GL_OVR_multiview : require
-
-layout(num_views = 2) in;
-layout(location=0) in vec3 posIn;
-layout(location=1) in vec3 normalIn;
-
-uniform mat4 uPerspective;
-uniform mat4 uCameraLeftEye;
-uniform mat4 uCameraRightEye;
-uniform mat4 uTranslation;
-
-out vec3 oNormal;
-
-void main()
-{
-  vec4 p = uTranslation * vec4(posIn,1.);
-  if (gl_ViewID_OVR == 0u) {
-    p = uCameraLeftEye * p;
-  } else {
-    p = uCameraRightEye * p;
-  }
-  oNormal = normalIn;
-  gl_Position = uPerspective * p;
-}
-)";
-
 static void usage();
-static bool CompileFile(const char *fileName, ShHandle compiler, ShCompileOptions compileOptions);
 static void LogMsg(const char *msg, const char *name, const int num, const char *logName);
 static void PrintVariable(const std::string &prefix, size_t index, const sh::ShaderVariable &var);
 static void PrintActiveVariables(ShHandle compiler);
@@ -160,8 +57,9 @@ void GenerateResources(ShBuiltInResources *resources)
     resources->EXT_geometry_shader      = 1;
 }
 
-int InternalValidate(const sh::GLenum shaderType, int argc, const char *argv[])
+int InternalValidate(const char *shaderSrc, const sh::GLenum shaderType, int argc, const char *argv[])
 {
+
     TFailCode failCode = ESuccess;
 
     ShCompileOptions compileOptions = 0;
@@ -177,6 +75,10 @@ int InternalValidate(const sh::GLenum shaderType, int argc, const char *argv[])
 
     ShBuiltInResources resources;
     GenerateResources(&resources);
+
+    if (strlen(shaderSrc) == 0) {
+        failCode = EFailUsage;
+    }
 
     argc--;
     argv++;
@@ -329,84 +231,85 @@ int InternalValidate(const sh::GLenum shaderType, int argc, const char *argv[])
               default: failCode = EFailUsage;
             }
         }
+    }
+
+    if (spec != SH_GLES2_SPEC && spec != SH_WEBGL_SPEC)
+    {
+        resources.MaxDrawBuffers = 8;
+        resources.MaxVertexTextureImageUnits = 16;
+        resources.MaxTextureImageUnits       = 16;
+    }
+    ShHandle compiler = 0;
+    switch (shaderType)
+    {
+        case GL_VERTEX_SHADER:
+        if (vertexCompiler == 0)
+        {
+            vertexCompiler =
+                sh::ConstructCompiler(GL_VERTEX_SHADER, spec, output, &resources);
+        }
+        compiler = vertexCompiler;
+        break;
+        case GL_FRAGMENT_SHADER:
+        if (fragmentCompiler == 0)
+        {
+            fragmentCompiler =
+                sh::ConstructCompiler(GL_FRAGMENT_SHADER, spec, output, &resources);
+        }
+        compiler = fragmentCompiler;
+        break;
+        case GL_COMPUTE_SHADER:
+            if (computeCompiler == 0)
+            {
+                computeCompiler =
+                    sh::ConstructCompiler(GL_COMPUTE_SHADER, spec, output, &resources);
+            }
+            compiler = computeCompiler;
+            break;
+        case GL_GEOMETRY_SHADER_EXT:
+            if (geometryCompiler == 0)
+            {
+                geometryCompiler =
+                    sh::ConstructCompiler(GL_GEOMETRY_SHADER_EXT, spec, output, &resources);
+            }
+            compiler = geometryCompiler;
+            break;
+        default: break;
+    }
+
+    if (failCode == ESuccess) {
+        if (compiler)
+        {
+            bool compiled = sh::Compile(compiler, &shaderSrc, 1, compileOptions);
+
+            LogMsg("BEGIN", "COMPILER", numCompiles, "INFO LOG");
+            std::string log = sh::GetInfoLog(compiler);
+            logString += log + "\n";
+            LogMsg("END", "COMPILER", numCompiles, "INFO LOG");
+            logString += "\n\n";
+
+            if (compiled && (compileOptions & SH_OBJECT_CODE))
+            {
+                LogMsg("BEGIN", "COMPILER", numCompiles, "OBJ CODE");
+                std::string code = sh::GetObjectCode(compiler);
+                logString += code + "\n";
+                LogMsg("END", "COMPILER", numCompiles, "OBJ CODE");
+                logString += "\n\n";
+            }
+            if (compiled && (compileOptions & SH_VARIABLES))
+            {
+                LogMsg("BEGIN", "COMPILER", numCompiles, "VARIABLES");
+                PrintActiveVariables(compiler);
+                LogMsg("END", "COMPILER", numCompiles, "VARIABLES");
+                logString += "\n\n";
+            }
+            if (!compiled)
+                failCode = EFailCompile;
+            ++numCompiles;
+        }
         else
         {
-            if (spec != SH_GLES2_SPEC && spec != SH_WEBGL_SPEC)
-            {
-                resources.MaxDrawBuffers = 8;
-                resources.MaxVertexTextureImageUnits = 16;
-                resources.MaxTextureImageUnits       = 16;
-            }
-            ShHandle compiler = 0;
-            switch (shaderType)
-            {
-              case GL_VERTEX_SHADER:
-                if (vertexCompiler == 0)
-                {
-                    vertexCompiler =
-                        sh::ConstructCompiler(GL_VERTEX_SHADER, spec, output, &resources);
-                }
-                compiler = vertexCompiler;
-                break;
-              case GL_FRAGMENT_SHADER:
-                if (fragmentCompiler == 0)
-                {
-                    fragmentCompiler =
-                        sh::ConstructCompiler(GL_FRAGMENT_SHADER, spec, output, &resources);
-                }
-                compiler = fragmentCompiler;
-                break;
-              case GL_COMPUTE_SHADER:
-                  if (computeCompiler == 0)
-                  {
-                      computeCompiler =
-                          sh::ConstructCompiler(GL_COMPUTE_SHADER, spec, output, &resources);
-                  }
-                  compiler = computeCompiler;
-                  break;
-              case GL_GEOMETRY_SHADER_EXT:
-                  if (geometryCompiler == 0)
-                  {
-                      geometryCompiler =
-                          sh::ConstructCompiler(GL_GEOMETRY_SHADER_EXT, spec, output, &resources);
-                  }
-                  compiler = geometryCompiler;
-                  break;
-              default: break;
-            }
-            if (compiler)
-            {
-                bool compiled = CompileFile(argv[0], compiler, compileOptions);
-
-                LogMsg("BEGIN", "COMPILER", numCompiles, "INFO LOG");
-                std::string log = sh::GetInfoLog(compiler);
-                logString += log + "\n";
-                LogMsg("END", "COMPILER", numCompiles, "INFO LOG");
-                logString += "\n\n";
-
-                if (compiled && (compileOptions & SH_OBJECT_CODE))
-                {
-                    LogMsg("BEGIN", "COMPILER", numCompiles, "OBJ CODE");
-                    std::string code = sh::GetObjectCode(compiler);
-                    logString += code + "\n";
-                    LogMsg("END", "COMPILER", numCompiles, "OBJ CODE");
-                    logString += "\n\n";
-                }
-                if (compiled && (compileOptions & SH_VARIABLES))
-                {
-                    LogMsg("BEGIN", "COMPILER", numCompiles, "VARIABLES");
-                    PrintActiveVariables(compiler);
-                    LogMsg("END", "COMPILER", numCompiles, "VARIABLES");
-                    logString += "\n\n";
-                }
-                if (!compiled)
-                  failCode = EFailCompile;
-                ++numCompiles;
-            }
-            else
-            {
-                failCode = EFailCompilerCreate;
-            }
+            failCode = EFailCompilerCreate;
         }
     }
 
@@ -432,7 +335,7 @@ int InternalValidate(const sh::GLenum shaderType, int argc, const char *argv[])
 
 // Prevent name mangling for easy emscripten linking.
 extern "C" {
-    int ValidateShader(const sh::GLenum shaderType, const char *args, char **printLog) {
+    int ValidateShader(const char *shaderSrc, const sh::GLenum shaderType, const char *args, char **printLog) {
         // super basic split on spaces
         std::stringstream ss(args);
         std::string item;
@@ -448,7 +351,7 @@ extern "C" {
         }
         argv.push_back(nullptr);
 
-        int ret = InternalValidate(shaderType, argv.size() - 1, argv.data());
+        int ret = InternalValidate(shaderSrc, shaderType, argv.size() - 1, argv.data());
 
         // print accumulated log
         char *p = (char*)malloc(sizeof(char) * (logString.size() + 1));
@@ -498,34 +401,6 @@ void usage()
         "       -x=m     : enable OVR_multiview\n"
         "       -x=y     : enable YUV_target\n";
     // clang-format on
-}
-
-//
-//   Read a file's data into a string, and compile it using sh::Compile
-//
-bool CompileFile(const char *fileName, ShHandle compiler, ShCompileOptions compileOptions)
-{
-    std::regex aqFishRegex(R"(aq-fish-nm\.frag$)");
-    std::regex multiRegex(R"(multiview\.vert$)");
-    const char *source;
-
-    if (std::regex_search(fileName, aqFishRegex))
-    {
-        source = aqFishFrag.c_str();
-    }
-    else if (std::regex_search(fileName, multiRegex))
-    {
-        source = multiVert.c_str();
-    }
-    else
-    {
-        logString += "Error: unable to open input file: ";
-        logString += fileName;
-        logString += "\n";
-        return false;
-    }
-
-    return sh::Compile(compiler, &source, 1, compileOptions);
 }
 
 void LogMsg(const char *msg, const char *name, const int num, const char *logName)

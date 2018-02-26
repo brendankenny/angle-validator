@@ -8,9 +8,17 @@ module.exports = {
   },
   "rules": {
     // 2 == error, 1 == warning, 0 == off
-    "indent": [2, 2, {
-      "SwitchCase": 1,
-      "VariableDeclarator": 2
+    'indent': [2, 2, {
+      SwitchCase: 1,
+      VariableDeclarator: 2,
+      CallExpression: {arguments: 'off'},
+      MemberExpression: 'off',
+      FunctionExpression: {body: 1, parameters: 2},
+      ignoredNodes: [
+        'ConditionalExpression > :matches(.consequent, .alternate)',
+        'VariableDeclarator > ArrowFunctionExpression > :expression.body',
+        'CallExpression > ArrowFunctionExpression > :expression.body',
+      ],
     }],
     "max-len": [2, 100, {
       "ignoreComments": true,
