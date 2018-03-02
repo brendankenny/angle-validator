@@ -21,10 +21,6 @@ const tests = [
   // aq-fish-nm.frag
   {
     file: aqFishFrag,
-    cmd: '-i',
-    check: /^#### BEGIN COMPILER 0 INFO LOG ####\n0:19: Code block/,
-  }, {
-    file: aqFishFrag,
     cmd: '-s=w -o -b=h11',
     check: /cbuffer DriverConstants : register\(b1\)/,
   }, {

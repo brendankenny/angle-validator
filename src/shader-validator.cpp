@@ -86,7 +86,6 @@ int InternalValidate(const char *shaderSrc, const sh::GLenum shaderType, int arg
         {
             switch (argv[0][1])
             {
-              case 'i': compileOptions |= SH_INTERMEDIATE_TREE; break;
               case 'o': compileOptions |= SH_OBJECT_CODE; break;
               case 'p': resources.WEBGL_debug_shader_precision = 1; break;
               case 's':
@@ -360,9 +359,8 @@ void usage()
 {
     // clang-format off
     logString +=
-        "Usage: translate [-i -o -l -p -b=e -b=g -b=h9 -x=i -x=d] file1 file2 ...\n"
+        "Usage: translate [-o -l -p -b=e -b=g -b=h9 -x=i -x=d] file1 file2 ...\n"
         "Where: filename : filename ending in .frag or .vert\n"
-        "       -i       : print intermediate tree\n"
         "       -o       : print translated code\n"
         "       -p       : use precision emulation\n"
         "       -s=e2    : use GLES2 spec (this is by default)\n"
