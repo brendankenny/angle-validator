@@ -18,22 +18,11 @@ const aqFishFrag = 'test/groundtruth/shaders/aq-fish-nm.frag';
 
 
 const tests = [
-  {
-    file: '',
-    cmd: '',
-    check: /^Usage: translate \[-i -o -u -l -p -b=e -b=g -b=h9 -x=i -x=d]/,
-  },
-
   // aq-fish-nm.frag
   {
     file: aqFishFrag,
     cmd: '-i',
     check: /^#### BEGIN COMPILER 0 INFO LOG ####\n0:19: Code block/,
-  }, {
-    file: aqFishFrag,
-    cmd: '-s=w -u',
-    // eslint-disable-next-line max-len
-    check: /#### BEGIN COMPILER 0 VARIABLES ####\nuniform 0 : name=lightColor, mappedName=_ulightColor, type=GL_FLOAT_VEC4, arraySizes=/,
   }, {
     file: aqFishFrag,
     cmd: '-s=w -o -b=h11',
@@ -48,18 +37,13 @@ const tests = [
   // multiview.vert
   {
     file: multiviewVert,
-    cmd: '-s=w -u',
+    cmd: '-s=w',
     // eslint-disable-next-line max-len
     check: /#### BEGIN COMPILER 0 INFO LOG ####\nERROR: 0:11: 'GL_OVR_multiview' : extension is not supported/,
   }, {
     file: multiviewVert,
-    cmd: '-s=w -x=m -u',
+    cmd: '-s=w -x=m',
     check: /^#### BEGIN COMPILER 0 INFO LOG ####\nERROR: unsupported shader version/,
-  }, {
-    file: multiviewVert,
-    cmd: '-s=w2 -x=m -u',
-    // eslint-disable-next-line max-len
-    check: /#### BEGIN COMPILER 0 VARIABLES ####\nuniform 0 : name=uPerspective, mappedName=_uuPerspective, type=GL_FLOAT_MAT4, arraySizes=/,
   }, {
     file: multiviewVert,
     cmd: '-s=w2 -x=m -o -b=h9',
@@ -128,7 +112,7 @@ async function run() {
     const gtOutput = await runGroundTruthCommand(test.file, test.cmd);
 
     assert(headOutput.length > 0);
-    assert(test.check.test(headOutput));
+    assert(test.check.test(headOutput), `failed regex ${test.check}`);
     assert.strictEqual(headOutput.length, gtOutput.length);
     assert.strictEqual(headOutput, gtOutput);
   }
@@ -136,4 +120,7 @@ async function run() {
   console.log('complete!');
 }
 
-run();
+run().catch(err => {
+  console.error('failed, with message `' + err.message + '`');
+  throw err;
+});

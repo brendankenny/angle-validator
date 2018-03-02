@@ -27,8 +27,6 @@ enum TFailCode
 
 static void usage();
 static void LogMsg(const char *msg, const char *name, const int num, const char *logName);
-static void PrintVariable(const std::string &prefix, size_t index, const sh::ShaderVariable &var);
-static void PrintActiveVariables(ShHandle compiler);
 
 static bool ParseGLSLOutputVersion(const std::string &, ShShaderOutput *outResult);
 static bool ParseIntValue(const std::string &, int emptyDefault, int *outValue);
@@ -90,7 +88,6 @@ int InternalValidate(const char *shaderSrc, const sh::GLenum shaderType, int arg
             {
               case 'i': compileOptions |= SH_INTERMEDIATE_TREE; break;
               case 'o': compileOptions |= SH_OBJECT_CODE; break;
-              case 'u': compileOptions |= SH_VARIABLES; break;
               case 'p': resources.WEBGL_debug_shader_precision = 1; break;
               case 's':
                 if (argv[0][2] == '=')
@@ -296,13 +293,6 @@ int InternalValidate(const char *shaderSrc, const sh::GLenum shaderType, int arg
                 LogMsg("END", "COMPILER", numCompiles, "OBJ CODE");
                 logString += "\n\n";
             }
-            if (compiled && (compileOptions & SH_VARIABLES))
-            {
-                LogMsg("BEGIN", "COMPILER", numCompiles, "VARIABLES");
-                PrintActiveVariables(compiler);
-                LogMsg("END", "COMPILER", numCompiles, "VARIABLES");
-                logString += "\n\n";
-            }
             if (!compiled)
                 failCode = EFailCompile;
             ++numCompiles;
@@ -370,11 +360,10 @@ void usage()
 {
     // clang-format off
     logString +=
-        "Usage: translate [-i -o -u -l -p -b=e -b=g -b=h9 -x=i -x=d] file1 file2 ...\n"
+        "Usage: translate [-i -o -l -p -b=e -b=g -b=h9 -x=i -x=d] file1 file2 ...\n"
         "Where: filename : filename ending in .frag or .vert\n"
         "       -i       : print intermediate tree\n"
         "       -o       : print translated code\n"
-        "       -u       : print active attribs, uniforms, varyings and program outputs\n"
         "       -p       : use precision emulation\n"
         "       -s=e2    : use GLES2 spec (this is by default)\n"
         "       -s=e3    : use GLES3 spec\n"
@@ -412,215 +401,6 @@ void LogMsg(const char *msg, const char *name, const int num, const char *logNam
     logString += " " + std::to_string(num) + " ";
     logString += logName;
     logString += " ####\n";
-}
-
-void PrintVariable(const std::string &prefix, size_t index, const sh::ShaderVariable &var)
-{
-    std::string typeName;
-    switch (var.type)
-    {
-      case GL_FLOAT: typeName = "GL_FLOAT"; break;
-      case GL_FLOAT_VEC2: typeName = "GL_FLOAT_VEC2"; break;
-      case GL_FLOAT_VEC3: typeName = "GL_FLOAT_VEC3"; break;
-      case GL_FLOAT_VEC4: typeName = "GL_FLOAT_VEC4"; break;
-      case GL_INT: typeName = "GL_INT"; break;
-      case GL_INT_VEC2: typeName = "GL_INT_VEC2"; break;
-      case GL_INT_VEC3: typeName = "GL_INT_VEC3"; break;
-      case GL_INT_VEC4: typeName = "GL_INT_VEC4"; break;
-      case GL_UNSIGNED_INT: typeName = "GL_UNSIGNED_INT"; break;
-      case GL_UNSIGNED_INT_VEC2: typeName = "GL_UNSIGNED_INT_VEC2"; break;
-      case GL_UNSIGNED_INT_VEC3: typeName = "GL_UNSIGNED_INT_VEC3"; break;
-      case GL_UNSIGNED_INT_VEC4: typeName = "GL_UNSIGNED_INT_VEC4"; break;
-      case GL_BOOL: typeName = "GL_BOOL"; break;
-      case GL_BOOL_VEC2: typeName = "GL_BOOL_VEC2"; break;
-      case GL_BOOL_VEC3: typeName = "GL_BOOL_VEC3"; break;
-      case GL_BOOL_VEC4: typeName = "GL_BOOL_VEC4"; break;
-      case GL_FLOAT_MAT2: typeName = "GL_FLOAT_MAT2"; break;
-      case GL_FLOAT_MAT3: typeName = "GL_FLOAT_MAT3"; break;
-      case GL_FLOAT_MAT4: typeName = "GL_FLOAT_MAT4"; break;
-      case GL_FLOAT_MAT2x3: typeName = "GL_FLOAT_MAT2x3"; break;
-      case GL_FLOAT_MAT3x2: typeName = "GL_FLOAT_MAT3x2"; break;
-      case GL_FLOAT_MAT4x2: typeName = "GL_FLOAT_MAT4x2"; break;
-      case GL_FLOAT_MAT2x4: typeName = "GL_FLOAT_MAT2x4"; break;
-      case GL_FLOAT_MAT3x4: typeName = "GL_FLOAT_MAT3x4"; break;
-      case GL_FLOAT_MAT4x3: typeName = "GL_FLOAT_MAT4x3"; break;
-
-      case GL_SAMPLER_2D: typeName = "GL_SAMPLER_2D"; break;
-      case GL_SAMPLER_3D:
-          typeName = "GL_SAMPLER_3D";
-          break;
-      case GL_SAMPLER_CUBE:
-          typeName = "GL_SAMPLER_CUBE";
-          break;
-      case GL_SAMPLER_CUBE_SHADOW:
-          typeName = "GL_SAMPLER_CUBE_SHADOW";
-          break;
-      case GL_SAMPLER_2D_SHADOW:
-          typeName = "GL_SAMPLER_2D_ARRAY_SHADOW";
-          break;
-      case GL_SAMPLER_2D_ARRAY:
-          typeName = "GL_SAMPLER_2D_ARRAY";
-          break;
-      case GL_SAMPLER_2D_ARRAY_SHADOW:
-          typeName = "GL_SAMPLER_2D_ARRAY_SHADOW";
-          break;
-      case GL_SAMPLER_2D_MULTISAMPLE:
-          typeName = "GL_SAMPLER_2D_MULTISAMPLE";
-          break;
-      case GL_IMAGE_2D:
-          typeName = "GL_IMAGE_2D";
-          break;
-      case GL_IMAGE_3D:
-          typeName = "GL_IMAGE_3D";
-          break;
-      case GL_IMAGE_CUBE:
-          typeName = "GL_IMAGE_CUBE";
-          break;
-      case GL_IMAGE_2D_ARRAY:
-          typeName = "GL_IMAGE_2D_ARRAY";
-          break;
-
-      case GL_INT_SAMPLER_2D:
-          typeName = "GL_INT_SAMPLER_2D";
-          break;
-      case GL_INT_SAMPLER_3D:
-          typeName = "GL_INT_SAMPLER_3D";
-          break;
-      case GL_INT_SAMPLER_CUBE:
-          typeName = "GL_INT_SAMPLER_CUBE";
-          break;
-      case GL_INT_SAMPLER_2D_ARRAY:
-          typeName = "GL_INT_SAMPLER_2D_ARRAY";
-          break;
-      case GL_INT_SAMPLER_2D_MULTISAMPLE:
-          typeName = "GL_INT_SAMPLER_2D_MULTISAMPLE";
-          break;
-      case GL_INT_IMAGE_2D:
-          typeName = "GL_INT_IMAGE_2D";
-          break;
-      case GL_INT_IMAGE_3D:
-          typeName = "GL_INT_IMAGE_3D";
-          break;
-      case GL_INT_IMAGE_CUBE:
-          typeName = "GL_INT_IMAGE_CUBE";
-          break;
-      case GL_INT_IMAGE_2D_ARRAY:
-          typeName = "GL_INT_IMAGE_2D_ARRAY";
-          break;
-
-      case GL_UNSIGNED_INT_SAMPLER_2D:
-          typeName = "GL_UNSIGNED_INT_SAMPLER_2D";
-          break;
-      case GL_UNSIGNED_INT_SAMPLER_3D:
-          typeName = "GL_UNSIGNED_INT_SAMPLER_3D";
-          break;
-      case GL_UNSIGNED_INT_SAMPLER_CUBE:
-          typeName = "GL_UNSIGNED_INT_SAMPLER_CUBE";
-          break;
-      case GL_UNSIGNED_INT_SAMPLER_2D_ARRAY:
-          typeName = "GL_UNSIGNED_INT_SAMPLER_2D_ARRAY";
-          break;
-      case GL_UNSIGNED_INT_ATOMIC_COUNTER:
-          typeName = "GL_UNSIGNED_INT_ATOMIC_COUNTER";
-          break;
-      case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE:
-          typeName = "GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE";
-          break;
-      case GL_UNSIGNED_INT_IMAGE_2D:
-          typeName = "GL_UNSIGNED_INT_IMAGE_2D";
-          break;
-      case GL_UNSIGNED_INT_IMAGE_3D:
-          typeName = "GL_UNSIGNED_INT_IMAGE_3D";
-          break;
-      case GL_UNSIGNED_INT_IMAGE_CUBE:
-          typeName = "GL_UNSIGNED_INT_IMAGE_CUBE";
-          break;
-      case GL_UNSIGNED_INT_IMAGE_2D_ARRAY:
-          typeName = "GL_UNSIGNED_INT_IMAGE_2D_ARRAY";
-          break;
-
-      case GL_SAMPLER_EXTERNAL_OES: typeName = "GL_SAMPLER_EXTERNAL_OES"; break;
-      case GL_SAMPLER_EXTERNAL_2D_Y2Y_EXT:
-          typeName = "GL_SAMPLER_EXTERNAL_2D_Y2Y_EXT";
-          break;
-      default: typeName = "UNKNOWN"; break;
-    }
-
-    logString += prefix + " " + std::to_string(static_cast<unsigned int>(index));
-    logString += " : name=" + var.name + ", mappedName=" + var.mappedName;
-    logString += ", type=" + typeName + ", arraySizes=";
-    for (unsigned int arraySize : var.arraySizes)
-    {
-        logString += std::to_string(arraySize) + " ";
-    }
-    logString += "\n";
-    if (var.fields.size())
-    {
-        std::string structPrefix;
-        for (size_t i = 0; i < prefix.size(); ++i)
-            structPrefix += ' ';
-        logString += structPrefix + "  struct " + var.structName + "\n";
-        structPrefix += "    field";
-        for (size_t i = 0; i < var.fields.size(); ++i)
-            PrintVariable(structPrefix, i, var.fields[i]);
-    }
-}
-
-static void PrintActiveVariables(ShHandle compiler)
-{
-    const std::vector<sh::Uniform> *uniforms       = sh::GetUniforms(compiler);
-    const std::vector<sh::Varying> *inputVaryings  = sh::GetInputVaryings(compiler);
-    const std::vector<sh::Varying> *outputVaryings = sh::GetOutputVaryings(compiler);
-    const std::vector<sh::Attribute> *attributes   = sh::GetAttributes(compiler);
-    const std::vector<sh::OutputVariable> *outputs = sh::GetOutputVariables(compiler);
-    for (size_t varCategory = 0; varCategory < 5; ++varCategory)
-    {
-        size_t numVars = 0;
-        std::string varCategoryName;
-        if (varCategory == 0)
-        {
-            numVars = uniforms->size();
-            varCategoryName = "uniform";
-        }
-        else if (varCategory == 1)
-        {
-            numVars         = inputVaryings->size();
-            varCategoryName = "input varying";
-        }
-        else if (varCategory == 2)
-        {
-            numVars         = outputVaryings->size();
-            varCategoryName = "output varying";
-        }
-        else if (varCategory == 3)
-        {
-            numVars = attributes->size();
-            varCategoryName = "attribute";
-        }
-        else
-        {
-            numVars         = outputs->size();
-            varCategoryName = "output";
-        }
-
-        for (size_t i = 0; i < numVars; ++i)
-        {
-            const sh::ShaderVariable *var;
-            if (varCategory == 0)
-                var = &((*uniforms)[i]);
-            else if (varCategory == 1)
-                var = &((*inputVaryings)[i]);
-            else if (varCategory == 2)
-                var = &((*outputVaryings)[i]);
-            else if (varCategory == 3)
-                var = &((*attributes)[i]);
-            else
-                var = &((*outputs)[i]);
-
-            PrintVariable(varCategoryName, i, *var);
-        }
-        logString += "\n";
-    }
 }
 
 static bool ParseGLSLOutputVersion(const std::string &num, ShShaderOutput *outResult)
