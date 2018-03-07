@@ -32,22 +32,65 @@ const HLSL9 = 'h9';
 const HLSL11 = 'h11';
 const OUTPUT_TYPES = [GLSL_ES, GLSL, ...GLSL_VERSIONS, HLSL9, HLSL11];
 
+// eslint-disable-next-line max-len
+const ERROR_LOG_EXTRACT = /#### BEGIN COMPILER 0 INFO LOG ####\n([^]*)\n\n#### END COMPILER 0 INFO LOG ####/;
+// eslint-disable-next-line max-len
+const TRANSLATED_EXTRACT = /#### BEGIN COMPILER 0 OBJ CODE ####\n([^]*)\n\n#### END COMPILER 0 OBJ CODE ####/;
+
 const tests = [
   // aq-fish-nm.frag
   {
     file: aqFishFrag,
     cmd: {
-      input: WEBGL1,
-      output: HLSL11,
+      input: WEBGL2,
+      output: GLSL_ES,
     },
-    check: /cbuffer DriverConstants : register\(b1\)/,
+    translatedCheck: /uniform mediump vec4 _ulightColor;\nvarying mediump vec4 _uv_position;/,
   }, {
     file: aqFishFrag,
     cmd: {
       input: WEBGL2,
+      output: GLSL_ES,
+      precisionEmulation: true,
     },
-    // eslint-disable-next-line max-len
-    check: /#### BEGIN COMPILER 0 OBJ CODE ####\nuniform mediump vec4 _ulightColor;\nvarying mediump vec4 _uv_position;/,
+    translatedCheck: /^highp float angle_frm\(in highp float x\) {/,
+  }, {
+    file: aqFishFrag,
+    cmd: {
+      input: WEBGL2,
+      output: 'g330',
+    },
+    translatedCheck: /^#version 330\n#extension GL_ARB_gpu_shader5 : enable/,
+  }, {
+    file: aqFishFrag,
+    cmd: {
+      input: WEBGL1,
+      output: HLSL9,
+    },
+    translatedCheck: /^float3x3 mat3_ctor\(float3 x0, float3 x1, float3 x2\)/,
+  }, {
+    file: aqFishFrag,
+    cmd: {
+      input: WEBGL1,
+      output: HLSL11,
+    },
+    translatedCheck: /cbuffer DriverConstants : register\(b1\)/,
+  }, {
+    file: aqFishFrag,
+    cmd: {
+      input: WEBGL1,
+      output: HLSL9,
+      precisionEmulation: true,
+    },
+    errorCheck: /^ERROR: Precision emulation not supported for this output type./,
+  }, {
+    file: aqFishFrag,
+    cmd: {
+      input: WEBGL1,
+      output: HLSL11,
+      precisionEmulation: true,
+    },
+    translatedCheck: /^float1 angle_frm\(float1 v\) {\n *v = clamp\(v, -65504\.0, 65504\.0\);/,
   },
 
   // multiview.vert
@@ -56,15 +99,14 @@ const tests = [
     cmd: {
       input: WEBGL1,
     },
-    // eslint-disable-next-line max-len
-    check: /#### BEGIN COMPILER 0 INFO LOG ####\nERROR: 0:11: 'GL_OVR_multiview' : extension is not supported/,
+    errorCheck: /ERROR: 0:11: 'GL_OVR_multiview' : extension is not supported/,
   }, {
     file: multiviewVert,
     cmd: {
       input: WEBGL1,
       OVR_multiview: true,
     },
-    check: /^#### BEGIN COMPILER 0 INFO LOG ####\nERROR: unsupported shader version/,
+    errorCheck: /ERROR: unsupported shader version/,
   }, {
     file: multiviewVert,
     cmd: {
@@ -73,7 +115,16 @@ const tests = [
       output: HLSL9,
     },
     // eslint-disable-next-line max-len
-    check: /uniform int multiviewBaseViewLayerIndex : register\(c19\);\n#ifdef ANGLE_ENABLE_LOOP_FLATTEN/,
+    translatedCheck: /uniform int multiviewBaseViewLayerIndex : register\(c19\);\n#ifdef ANGLE_ENABLE_LOOP_FLATTEN/,
+  }, {
+    file: multiviewVert,
+    cmd: {
+      input: WEBGL2,
+      OVR_multiview: true,
+      output: HLSL11,
+    },
+    // eslint-disable-next-line max-len
+    translatedCheck: /cbuffer DriverConstants : register\(b1\)\n{\n *float4 dx_ViewAdjust : packoffset\(c1\);/,
   },
 ];
 
@@ -147,14 +198,23 @@ async function getHeadValidator() {
 }
 
 async function runGroundTruthCommand(file, cmd) {
+  let stdout = '';
+
   try {
     // eslint-disable-next-line max-len
     const output = await execAsync(`cd ${__dirname} && node translator.js ${cmd} ${file}`,
         {encoding: 'utf8'});
-    return output.stdout;
+    stdout = output.stdout;
   } catch (e) {
-    return e.stdout;
+    stdout = e.stdout;
   }
+
+  const errorLog = ERROR_LOG_EXTRACT.exec(stdout);
+  const translatedCode = TRANSLATED_EXTRACT.exec(stdout);
+  return {
+    errorLog: errorLog && errorLog[1],
+    translatedCode: translatedCode && translatedCode[1],
+  };
 }
 
 async function runHeadCommand(head, file, cmd) {
@@ -165,7 +225,16 @@ async function runHeadCommand(head, file, cmd) {
   try {
     shaderSrc = fs.readFileSync(filepath, {encoding: 'utf8'});
   } catch (e) {}
-  return head.validateShader(shaderSrc, shaderType, cmd);
+
+
+  const output = head.validateShader(shaderSrc, shaderType, cmd);
+
+  const errorLog = ERROR_LOG_EXTRACT.exec(output);
+  const translatedCode = TRANSLATED_EXTRACT.exec(output);
+  return {
+    errorLog: errorLog && errorLog[1],
+    translatedCode: translatedCode && translatedCode[1],
+  };
 }
 
 async function run() {
@@ -203,10 +272,21 @@ async function run() {
     const headOutput = await runHeadCommand(head, test.file, headCmd);
     const gtOutput = await runGroundTruthCommand(test.file, gtCmd);
 
-    assert(headOutput.length > 0);
-    assert(test.check.test(headOutput), `failed regex ${test.check}`);
-    assert.strictEqual(headOutput.length, gtOutput.length);
-    assert.strictEqual(headOutput, gtOutput);
+    if (!test.errorCheck) {
+      assert.strictEqual(headOutput.errorLog, null);
+    } else {
+      assert(test.errorCheck.test(headOutput.errorLog), `errorLog failed regex ${test.errorCheck}`);
+    }
+
+    if (!test.translatedCheck) {
+      assert.strictEqual(headOutput.translatedCode, null);
+    } else {
+      assert(test.translatedCheck.test(headOutput.translatedCode),
+          `translatedCode failed regex ${test.translatedCheck}`);
+    }
+
+    assert.strictEqual(headOutput.errorLog, gtOutput.errorLog);
+    assert.strictEqual(headOutput.translatedCode, gtOutput.translatedCode);
   }
 
   console.log('complete!');
