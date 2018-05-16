@@ -9,10 +9,17 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <regex>
 #include <sstream>
 #include <vector>
-#include "angle_gl.h"
+
+// define locally to avoid excess clobbering by gl header #defines.
+// gl2.h
+static const int GL_FRAGMENT_SHADER = 0x8B30;
+static const int GL_VERTEX_SHADER = 0x8B31;
+// gl2ext.h
+static const int GL_GEOMETRY_SHADER_EXT = 0x8DD9;
+// gl31.h
+static const int GL_COMPUTE_SHADER = 0x91B9;
 
 //
 // Return codes from main.
@@ -23,6 +30,47 @@ enum TFailCode
     EFailUsage,
     EFailCompile,
     EFailCompilerCreate,
+};
+
+struct CompileOptions {
+    int32_t use_precision_emulation; // -p
+
+    // Extension enabled unless set to 0.
+    int32_t GL_OES_EGL_image_external; // -x=i
+    int32_t GL_OES_EGL_standard_derivatives; // -x=d
+    int32_t ARB_texture_rectangle; // -x=r
+    int32_t EXT_frag_depth; // -x=g
+    int32_t EXT_shader_texture_lod; // -x=l
+    int32_t EXT_shader_framebuffer_fetch; // -x=f
+    int32_t NV_shader_framebuffer_fetch; // -x=n
+    int32_t ARM_shader_framebuffer_fetch; // -x=a
+    int32_t OVR_multiview; // -x=m
+    int32_t YUV_target; // -x=y
+
+    // Set to number desired; disabled if set to 0.
+    int32_t EXT_blend_func_extended; // -x=b[NUM]
+    int32_t EXT_draw_buffers; // -x=w[NUM]
+};
+
+enum class InputType : int32_t {
+    GLES = 0,
+    WEBGL = 1,
+};
+
+struct InputOptions {
+    InputType input_type;
+    int32_t version_number;
+};
+
+enum class OutputType : int32_t {
+    GLES = 0,
+    GLSL = 1,
+    HLSL = 2
+};
+
+struct OutputOptions {
+    OutputType output_type;
+    int32_t version_number;
 };
 
 static void usage();
