@@ -17,9 +17,10 @@ const angleGenPath = path.resolve(__dirname, '../angle/out/json/project.json');
 const DEP_TARGETS = ['//:translator'];
 const completedTargets = Symbol('completedTargets');
 
+// TODO(bckenny): seems like a tsc regression that this can't be Object<string, ...>.
 /**
  * Properties to collect from build file, with functions to sanitize values.
- * @type {!Object<string, function(!Array<string>): !Array<string>}
+ * @type {{[p: string]: function(Array<string>): Array<string>}}
  */
 const TARGET_PROPS = {
   cflags_cc: identity,
@@ -30,8 +31,8 @@ const TARGET_PROPS = {
 
 /**
  * Filter/sanitize an array of source paths.
- * @param {!Array<string>} sources
- * @return {!Array<string>}
+ * @param {Array<string>} sources
+ * @return {Array<string>}
  */
 function filterSources(sources) {
   return sources
@@ -47,8 +48,8 @@ function filterSources(sources) {
 
 /**
  * Filter/sanitize an array of include paths.
- * @param {!Array<string>} includes
- * @return {!Array<string>}
+ * @param {Array<string>} includes
+ * @return {Array<string>}
  */
 function filterIncludes(includes) {
   return includes
@@ -62,8 +63,8 @@ function filterIncludes(includes) {
 
 /**
  * Return array of strings unchanged.
- * @param {!Array<string>} arr
- * @return {!Array<string>}
+ * @param {Array<string>} arr
+ * @return {Array<string>}
  */
 function identity(arr) {
   return arr;
@@ -72,17 +73,12 @@ function identity(arr) {
 /**
  * Depth first walk of dependencies from target `targetName`, taking the union
  * of the values of TARGET_PROPS as we go. Output on `extracted`.
- * @param {{targets: !Object<string, !Object<string, (!Array<string>|undefined)>}} buildInfo
+ * @param {{targets: Object<string, Object<string, (Array<string>|undefined)>>}} buildInfo
  * @param {string} targetName
- * @param {!Object<string, !Set<string>>} extracted
+ * @param {{[p: string]: Set<string>, [completedTargets]: Set<string>}} extracted
  * @param {number=} depth
  */
 function gatherDeps(buildInfo, targetName, extracted, depth = 0) {
-  // Track already walked deps via `completedTargets` symbol.
-  if (!extracted[completedTargets]) {
-    extracted[completedTargets] = new Set();
-  }
-
   const logName = extracted[completedTargets].has(targetName) ? `(${targetName})` : targetName;
   log('  '.repeat(depth) + logName);
 
@@ -117,12 +113,13 @@ function gatherDeps(buildInfo, targetName, extracted, depth = 0) {
       extracted[propName] = new Set();
     }
 
-    if (!target[propName]) {
+    const targetResources = target[propName];
+    if (!targetResources) {
       log('  '.repeat(depth) + `  - no ${propName}`);
       continue;
     }
 
-    for (const propValue of filterValues(target[propName])) {
+    for (const propValue of filterValues(targetResources)) {
       extracted[propName].add(propValue);
     }
   }
@@ -136,7 +133,10 @@ try {
   process.exit(1);
 }
 
-const extracted = {};
+const extracted = {
+  // Track already walked deps via `completedTargets` symbol.
+  [completedTargets]: new Set(),
+};
 for (const targetName of DEP_TARGETS) {
   gatherDeps(angleGen, targetName, extracted);
 }

@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "module": "commonjs",
+    "target": "ES2017",
+    "allowJs": true,
+    "checkJs": true,
+    "strict": true,
+    // "listFiles": true,
+    "typeRoots": [
+      "@types",
+    ],
+    "resolveJsonModule": true,
+
+    "diagnostics": true
+  },
+  "include": [
+    "build/**/*.js",
+    "src/**/*.js",
+    // "test/groundtruth/compare.js",
+  ],
+  "exclude": [
+    "angle/**",
+    "emsdk/**",
+    "angle/**",
+    "out/**",
+    "test/groundtruth/**",
+
+    // Exclude types by default
+    "types/**",
+  ]
+}

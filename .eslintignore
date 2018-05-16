@@ -1,0 +1,9 @@
+/angle/**
+/emsdk/**
+/node_modules/**
+
+# Generated files
+/out/**
+/test/groundtruth/**
+
+!.eslintrc.js

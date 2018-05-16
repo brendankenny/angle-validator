@@ -7,7 +7,9 @@
     "gen": "cd angle && gn gen out/json --args=\"angle_enable_hlsl=true is_debug=false\" --ide=json && yarn extract-sources",
     "extract-sources": "node ./build/extract-sources.js",
     "build": "node ./build/build.js",
-    "test": "node ./test/groundtruth/compare.js"
+    "test": "node ./test/groundtruth/compare.js",
+    "lint": "eslint .",
+    "type-check": "tsc -p ."
   },
   "repository": {
     "type": "git",
@@ -25,8 +27,11 @@
   },
   "homepage": "https://github.com/brendankenny/angle-validator#readme",
   "devDependencies": {
+    "@types/mkdirp": "^0.5.2",
+    "@types/node": "*",
     "eslint": "4.17.0",
     "eslint-config-google": "0.9.1",
-    "mkdirp": "0.5.1"
+    "mkdirp": "0.5.1",
+    "typescript": "^2.9.0-dev.20180515"
   }
 }

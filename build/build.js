@@ -41,12 +41,12 @@ const GT_OUTPUT_ARGS = [
 
 /**
  * Find output path and ensure chain of directories is available.
- * @param {!Array<string>} args
+ * @param {Array<string>} args
  */
 function ensureOutputPath(args) {
   const index = args.indexOf('-o') + 1;
   if (index === 0) {
-    throw new Error('output path not found in', JSON.stringify(args));
+    throw new Error('output path not found in' + JSON.stringify(args));
   }
 
   const outPath = path.dirname(args[index]);
@@ -65,7 +65,7 @@ function run(src = validatorSrc, outputArgs = OUTPUT_ARGS) {
 
   const commandEcho = `echo ${COMPILER} -D... -I... ... ${src} ${outputArgs.join(' ')}`;
 
-  const args = [].concat(
+  const args = /** @type {Array<string>} */ ([]).concat(
     config.cflags_cc,
     config.defines.map(d => '-D' + d),
     config.include_dirs.map(i => '-I' + anglePath + i),
