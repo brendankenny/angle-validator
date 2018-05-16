@@ -59,10 +59,11 @@ declare global {
     }
 
     type ShaderInputType = {
-      spec: InputType['GLES'];
+      spec: InputType['GLES']; // -s=[e2|e3|e31]
       version?: 2 | 3 | 31;
     } | {
-      spec: InputType['WEBGL'];
+      spec: InputType['WEBGL']; // -s=[w|w2|w3]
+      // TODO(bckenny): WEBGL 3??
       version?: 1 | 2 | 3;
     };
 
@@ -73,12 +74,12 @@ declare global {
     }
 
     type ShaderOutputType = {
-      spec: OutputType['GLES'];
+      spec: OutputType['GLES']; // -b=e
     } | {
-      spec: OutputType['GLSL'];
+      spec: OutputType['GLSL']; // -b=g[NUM]
       version?: 130 | 140 | 150 | 330 | 400 | 410 | 420 | 430 | 440 | 450;
     } | {
-      spec: OutputType['HLSL'];
+      spec: OutputType['HLSL']; // -b=[h9|h11]
       version?: 9 | 11;
     };
   }

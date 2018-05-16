@@ -76,9 +76,6 @@ struct OutputOptions {
 static void usage();
 static void LogMsg(const char *msg, const char *name, const int num, const char *logName);
 
-static bool ParseGLSLOutputVersion(const std::string &, ShShaderOutput *outResult);
-static bool ParseIntValue(const std::string &, int emptyDefault, int *outValue);
-
 std::string logString;
 
 //
@@ -103,220 +100,171 @@ void GenerateResources(ShBuiltInResources *resources)
     resources->EXT_geometry_shader      = 1;
 }
 
-int InternalValidate(const char *shaderSrc, const sh::GLenum shaderType, int argc, const char *argv[])
+int InternalValidate(const char *shaderSrc, const sh::GLenum shaderType, const InputOptions &inputOpts, const OutputOptions &outputOpts, const CompileOptions &compileOpts)
 {
 
     TFailCode failCode = ESuccess;
 
-    ShCompileOptions compileOptions = 0;
-    int numCompiles = 0;
-    ShHandle vertexCompiler = 0;
-    ShHandle fragmentCompiler = 0;
-    ShHandle computeCompiler  = 0;
-    ShHandle geometryCompiler       = 0;
+    ShCompileOptions shCompileOptions = 0;
     ShShaderSpec spec = SH_GLES2_SPEC;
+    // TODO(bckenny): old default case doesn't set SH_INITIALIZE_UNINITIALIZED_LOCALS. Why not?
     ShShaderOutput output = SH_ESSL_OUTPUT;
 
+    // TODO(bckenny): need these at first in this function?
     sh::Initialize();
-
     ShBuiltInResources resources;
     GenerateResources(&resources);
 
-    if (strlen(shaderSrc) == 0) {
+    // Always print code (old -o option)
+    shCompileOptions |= SH_OBJECT_CODE;
+
+    // TODO(bckenny): switch instead
+    // Input spec
+    if (inputOpts.input_type == InputType::GLES) { // -s=e
+        if (inputOpts.version_number == 31) {
+            spec = SH_GLES3_1_SPEC;
+        } else if (inputOpts.version_number == 3) {
+            spec = SH_GLES3_SPEC;
+        } else {
+            spec = SH_GLES2_SPEC;
+        }
+    } else if (inputOpts.input_type == InputType::WEBGL) { // -s=w
+        // TODO(bckenny): WEBGL 3??
+        if (inputOpts.version_number == 3) {
+            spec = SH_WEBGL3_SPEC;
+        } else if (inputOpts.version_number == 2) {
+            spec = SH_WEBGL2_SPEC;
+        } else {
+            // TODO(bckenny): support for -s=wn?
+            spec = SH_WEBGL_SPEC;
+            resources.FragmentPrecisionHigh = 1;
+        }
+    } else {
         failCode = EFailUsage;
     }
 
-    argc--;
-    argv++;
-    for (; (argc >= 1) && (failCode == ESuccess); argc--, argv++)
-    {
-        if (argv[0][0] == '-')
+    // Output type
+    if (outputOpts.output_type == OutputType::GLES) { // -b=e
+        output = SH_ESSL_OUTPUT;
+        shCompileOptions |= SH_INITIALIZE_UNINITIALIZED_LOCALS;
+    } else if (outputOpts.output_type == OutputType::GLSL) { // -b=g[NUM]
+        switch (outputOpts.version_number)
         {
-            switch (argv[0][1])
-            {
-              case 'o': compileOptions |= SH_OBJECT_CODE; break;
-              case 'p': resources.WEBGL_debug_shader_precision = 1; break;
-              case 's':
-                if (argv[0][2] == '=')
-                {
-                    switch (argv[0][3])
-                    {
-                        case 'e':
-                            if (argv[0][4] == '3')
-                            {
-                                if (argv[0][5] == '1')
-                                {
-                                    spec = SH_GLES3_1_SPEC;
-                                }
-                                else
-                                {
-                                    spec = SH_GLES3_SPEC;
-                                }
-                            }
-                            else
-                            {
-                                spec = SH_GLES2_SPEC;
-                            }
-                            break;
-                        case 'w':
-                            if (argv[0][4] == '3')
-                            {
-                                spec = SH_WEBGL3_SPEC;
-                            }
-                            else if (argv[0][4] == '2')
-                            {
-                                spec = SH_WEBGL2_SPEC;
-                            }
-                            else if (argv[0][4] == 'n')
-                            {
-                                spec = SH_WEBGL_SPEC;
-                            }
-                            else
-                            {
-                                spec = SH_WEBGL_SPEC;
-                                resources.FragmentPrecisionHigh = 1;
-                            }
-                            break;
-                        default:
-                            failCode = EFailUsage;
-                    }
-                }
-                else
-                {
-                    failCode = EFailUsage;
-                }
+            case 130:
+                output = SH_GLSL_130_OUTPUT;
                 break;
-              case 'b':
-                if (argv[0][2] == '=')
-                {
-                    switch (argv[0][3])
-                    {
-                        case 'e':
-                            output = SH_ESSL_OUTPUT;
-                            compileOptions |= SH_INITIALIZE_UNINITIALIZED_LOCALS;
-                            break;
-                        case 'g':
-                            if (!ParseGLSLOutputVersion(&argv[0][sizeof("-b=g") - 1], &output))
-                            {
-                                failCode = EFailUsage;
-                            }
-                            compileOptions |= SH_INITIALIZE_UNINITIALIZED_LOCALS;
-                            break;
-                        case 'h':
-                            if (argv[0][4] == '1' && argv[0][5] == '1')
-                            {
-                                output = SH_HLSL_4_1_OUTPUT;
-                            }
-                            else
-                            {
-                                output = SH_HLSL_3_0_OUTPUT;
-                            }
-                            break;
-                        default:
-                            failCode = EFailUsage;
-                    }
-                }
-                else
-                {
-                    failCode = EFailUsage;
-                }
+            case 140:
+                output = SH_GLSL_140_OUTPUT;
                 break;
-              case 'x':
-                if (argv[0][2] == '=')
-                {
-                    // clang-format off
-                    switch (argv[0][3])
-                    {
-                      case 'i': resources.OES_EGL_image_external = 1; break;
-                      case 'd': resources.OES_standard_derivatives = 1; break;
-                      case 'r': resources.ARB_texture_rectangle = 1; break;
-                      case 'b':
-                          if (ParseIntValue(&argv[0][sizeof("-x=b") - 1], 1,
-                                            &resources.MaxDualSourceDrawBuffers))
-                          {
-                              resources.EXT_blend_func_extended = 1;
-                          }
-                          else
-                          {
-                              failCode = EFailUsage;
-                          }
-                          break;
-                      case 'w':
-                          if (ParseIntValue(&argv[0][sizeof("-x=w") - 1], 1,
-                                            &resources.MaxDrawBuffers))
-                          {
-                              resources.EXT_draw_buffers = 1;
-                          }
-                          else
-                          {
-                              failCode = EFailUsage;
-                          }
-                          break;
-                      case 'g': resources.EXT_frag_depth = 1; break;
-                      case 'l': resources.EXT_shader_texture_lod = 1; break;
-                      case 'f': resources.EXT_shader_framebuffer_fetch = 1; break;
-                      case 'n': resources.NV_shader_framebuffer_fetch = 1; break;
-                      case 'a': resources.ARM_shader_framebuffer_fetch = 1; break;
-                      case 'm':
-                          resources.OVR_multiview = 1;
-                          compileOptions |= SH_INITIALIZE_BUILTINS_FOR_INSTANCED_MULTIVIEW;
-                          compileOptions |= SH_SELECT_VIEW_IN_NV_GLSL_VERTEX_SHADER;
-                          break;
-                      case 'y': resources.EXT_YUV_target = 1; break;
-                      default: failCode = EFailUsage;
-                    }
-                    // clang-format on
-                }
-                else
-                {
-                    failCode = EFailUsage;
-                }
+            case 150:
+                output = SH_GLSL_150_CORE_OUTPUT;
                 break;
-              default: failCode = EFailUsage;
-            }
+            case 330:
+                output = SH_GLSL_330_CORE_OUTPUT;
+                break;
+            case 400:
+                output = SH_GLSL_400_CORE_OUTPUT;
+                break;
+            case 410:
+                output = SH_GLSL_410_CORE_OUTPUT;
+                break;
+            case 420:
+                output = SH_GLSL_420_CORE_OUTPUT;
+                break;
+            case 430:
+                output = SH_GLSL_430_CORE_OUTPUT;
+                break;
+            case 440:
+                output = SH_GLSL_440_CORE_OUTPUT;
+                break;
+            case 450:
+                output = SH_GLSL_450_CORE_OUTPUT;
+                break;
+            default:
+                output = SH_GLSL_COMPATIBILITY_OUTPUT;
+                break;
         }
+        shCompileOptions |= SH_INITIALIZE_UNINITIALIZED_LOCALS;
+    } else if (outputOpts.output_type == OutputType::HLSL) { // -b=h[9|11]
+        if (outputOpts.version_number == 11) {
+            output = SH_HLSL_4_1_OUTPUT;
+        } else {
+            output = SH_HLSL_3_0_OUTPUT;
+        }
+    } else {
+        failCode = EFailUsage;
+    }
+
+    // Compile options
+    if (compileOpts.use_precision_emulation) {
+        resources.WEBGL_debug_shader_precision = 1;
+    }
+
+    // TODO(bckenny): verify actual defaults false/0?
+    if (compileOpts.GL_OES_EGL_image_external) {
+        resources.OES_EGL_image_external = 1;
+    }
+    if (compileOpts.GL_OES_EGL_standard_derivatives) {
+        resources.OES_standard_derivatives = 1;
+    }
+    if (compileOpts.ARB_texture_rectangle) {
+        resources.ARB_texture_rectangle = 1;
+    }
+    if (compileOpts.EXT_frag_depth) {
+        resources.EXT_frag_depth = 1;
+    }
+    if (compileOpts.EXT_shader_texture_lod) {
+        resources.EXT_shader_texture_lod = 1;
+    }
+    if (compileOpts.EXT_shader_framebuffer_fetch) {
+        resources.EXT_shader_framebuffer_fetch = 1;
+    }
+    if (compileOpts.NV_shader_framebuffer_fetch) {
+        resources.NV_shader_framebuffer_fetch = 1;
+    }
+    if (compileOpts.ARM_shader_framebuffer_fetch) {
+        resources.ARM_shader_framebuffer_fetch = 1;
+    }
+    if (compileOpts.OVR_multiview) {
+        resources.OVR_multiview = 1;
+        shCompileOptions |= SH_INITIALIZE_BUILTINS_FOR_INSTANCED_MULTIVIEW;
+        shCompileOptions |= SH_SELECT_VIEW_IN_NV_GLSL_VERTEX_SHADER;
+    }
+    if (compileOpts.YUV_target) {
+        resources.EXT_YUV_target = 1;
+    }
+    // TODO(bckenny): for next two, could maybe rename property to differentiate from resources prop
+    if (compileOpts.EXT_blend_func_extended) {
+        resources.EXT_blend_func_extended = 1;
+        resources.MaxDualSourceDrawBuffers = compileOpts.EXT_blend_func_extended;
+    }
+    if (compileOpts.EXT_draw_buffers) {
+        resources.EXT_draw_buffers = 1;
+        resources.MaxDrawBuffers = compileOpts.EXT_draw_buffers;
     }
 
     if (spec != SH_GLES2_SPEC && spec != SH_WEBGL_SPEC)
     {
+        // TODO(bckenny): meant to overwrite EXT_draw_buffers option?
         resources.MaxDrawBuffers = 8;
         resources.MaxVertexTextureImageUnits = 16;
         resources.MaxTextureImageUnits       = 16;
     }
+
     ShHandle compiler = 0;
     switch (shaderType)
     {
         case GL_VERTEX_SHADER:
-        if (vertexCompiler == 0)
-        {
-            vertexCompiler =
-                sh::ConstructCompiler(GL_VERTEX_SHADER, spec, output, &resources);
-        }
-        compiler = vertexCompiler;
-        break;
+            compiler = sh::ConstructCompiler(GL_VERTEX_SHADER, spec, output, &resources);
+            break;
         case GL_FRAGMENT_SHADER:
-        if (fragmentCompiler == 0)
-        {
-            fragmentCompiler =
-                sh::ConstructCompiler(GL_FRAGMENT_SHADER, spec, output, &resources);
-        }
-        compiler = fragmentCompiler;
-        break;
+            compiler = sh::ConstructCompiler(GL_FRAGMENT_SHADER, spec, output, &resources);
+            break;
         case GL_COMPUTE_SHADER:
-            if (computeCompiler == 0)
-            {
-                computeCompiler =
-                    sh::ConstructCompiler(GL_COMPUTE_SHADER, spec, output, &resources);
-            }
-            compiler = computeCompiler;
+            compiler = sh::ConstructCompiler(GL_COMPUTE_SHADER, spec, output, &resources);
             break;
         case GL_GEOMETRY_SHADER_EXT:
-            if (geometryCompiler == 0)
-            {
-                geometryCompiler =
-                    sh::ConstructCompiler(GL_GEOMETRY_SHADER_EXT, spec, output, &resources);
-            }
-            compiler = geometryCompiler;
+            compiler = sh::ConstructCompiler(GL_GEOMETRY_SHADER_EXT, spec, output, &resources);
             break;
         default: break;
     }
@@ -324,25 +272,25 @@ int InternalValidate(const char *shaderSrc, const sh::GLenum shaderType, int arg
     if (failCode == ESuccess) {
         if (compiler)
         {
-            bool compiled = sh::Compile(compiler, &shaderSrc, 1, compileOptions);
+            bool compiled = sh::Compile(compiler, &shaderSrc, 1, shCompileOptions);
 
-            LogMsg("BEGIN", "COMPILER", numCompiles, "INFO LOG");
+            LogMsg("BEGIN", "COMPILER", 0, "INFO LOG");
             std::string log = sh::GetInfoLog(compiler);
             logString += log + "\n";
-            LogMsg("END", "COMPILER", numCompiles, "INFO LOG");
+            LogMsg("END", "COMPILER", 0, "INFO LOG");
             logString += "\n\n";
 
-            if (compiled && (compileOptions & SH_OBJECT_CODE))
+            // TODO(bckenny): always get object code.
+            if (compiled && (shCompileOptions & SH_OBJECT_CODE))
             {
-                LogMsg("BEGIN", "COMPILER", numCompiles, "OBJ CODE");
+                LogMsg("BEGIN", "COMPILER", 0, "OBJ CODE");
                 std::string code = sh::GetObjectCode(compiler);
                 logString += code + "\n";
-                LogMsg("END", "COMPILER", numCompiles, "OBJ CODE");
+                LogMsg("END", "COMPILER", 0, "OBJ CODE");
                 logString += "\n\n";
             }
             if (!compiled)
                 failCode = EFailCompile;
-            ++numCompiles;
         }
         else
         {
@@ -350,20 +298,17 @@ int InternalValidate(const char *shaderSrc, const sh::GLenum shaderType, int arg
         }
     }
 
-    if ((vertexCompiler == 0) && (fragmentCompiler == 0) && (computeCompiler == 0) &&
-        (geometryCompiler == 0))
+    if (compiler == 0)
         failCode = EFailUsage;
     if (failCode == EFailUsage)
+    {
+        // TODO(bckenny): handle signal of invalid input
         usage();
+    }
+        
 
-    if (vertexCompiler)
-        sh::Destruct(vertexCompiler);
-    if (fragmentCompiler)
-        sh::Destruct(fragmentCompiler);
-    if (computeCompiler)
-        sh::Destruct(computeCompiler);
-    if (geometryCompiler)
-        sh::Destruct(geometryCompiler);
+    if (compiler)
+        sh::Destruct(compiler);
 
     sh::Finalize();
 
@@ -372,23 +317,8 @@ int InternalValidate(const char *shaderSrc, const sh::GLenum shaderType, int arg
 
 // Prevent name mangling for easy emscripten linking.
 extern "C" {
-    int ValidateShader(const char *shaderSrc, const sh::GLenum shaderType, const char *args, char **printLog) {
-        // super basic split on spaces
-        std::stringstream ss(args);
-        std::string item;
-        std::vector<std::string> splitArgs = {"./shader-validator.cpp"};
-        char delim = ' ';
-        while (std::getline(ss, item, delim)) {
-            splitArgs.push_back(std::move(item));
-        }
-
-        std::vector<const char*> argv;
-        for (const auto& arg : splitArgs) {
-            argv.push_back(arg.c_str());
-        }
-        argv.push_back(nullptr);
-
-        int ret = InternalValidate(shaderSrc, shaderType, argv.size() - 1, argv.data());
+    int ValidateShader(const char *shaderSrc, const sh::GLenum shaderType, const InputOptions inputOptions, const OutputOptions outputOptions, const CompileOptions compileOptions, char **printLog) {
+        int ret = InternalValidate(shaderSrc, shaderType, inputOptions, outputOptions, compileOptions);
 
         // print accumulated log
         char *p = (char*)malloc(sizeof(char) * (logString.size() + 1));
@@ -447,74 +377,4 @@ void LogMsg(const char *msg, const char *name, const int num, const char *logNam
     logString += " " + std::to_string(num) + " ";
     logString += logName;
     logString += " ####\n";
-}
-
-static bool ParseGLSLOutputVersion(const std::string &num, ShShaderOutput *outResult)
-{
-    if (num.length() == 0)
-    {
-        *outResult = SH_GLSL_COMPATIBILITY_OUTPUT;
-        return true;
-    }
-    std::istringstream input(num);
-    int value;
-    if (!(input >> value && input.eof()))
-    {
-        return false;
-    }
-
-    switch (value)
-    {
-        case 130:
-            *outResult = SH_GLSL_130_OUTPUT;
-            return true;
-        case 140:
-            *outResult = SH_GLSL_140_OUTPUT;
-            return true;
-        case 150:
-            *outResult = SH_GLSL_150_CORE_OUTPUT;
-            return true;
-        case 330:
-            *outResult = SH_GLSL_330_CORE_OUTPUT;
-            return true;
-        case 400:
-            *outResult = SH_GLSL_400_CORE_OUTPUT;
-            return true;
-        case 410:
-            *outResult = SH_GLSL_410_CORE_OUTPUT;
-            return true;
-        case 420:
-            *outResult = SH_GLSL_420_CORE_OUTPUT;
-            return true;
-        case 430:
-            *outResult = SH_GLSL_430_CORE_OUTPUT;
-            return true;
-        case 440:
-            *outResult = SH_GLSL_440_CORE_OUTPUT;
-            return true;
-        case 450:
-            *outResult = SH_GLSL_450_CORE_OUTPUT;
-            return true;
-        default:
-            break;
-    }
-    return false;
-}
-
-static bool ParseIntValue(const std::string &num, int emptyDefault, int *outValue)
-{
-    if (num.length() == 0)
-    {
-        *outValue = emptyDefault;
-        return true;
-    }
-
-    std::istringstream input(num);
-    int value;
-    if (!(input >> value && input.eof()))
-    {
-        return false;
-    }
-    *outValue = value;
-    return true;
 }

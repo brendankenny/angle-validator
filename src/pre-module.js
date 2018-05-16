@@ -59,11 +59,12 @@ const OUTPUT_TYPES = {
 
 /**
  * @param {Partial<AngleValidator.CompileOptions>} opts
- * @return {Int32Array}
+ * @return {Int8Array}
  */
 function constructCompileOptionsStruct(opts) {
-  const defaultKeys = /** @type {Array<keyof AngleValidator.CompileOptions>} */ (Object.keys(defaultOptions));
-  const buffer = new Int32Array(defaultKeys.length);
+  const defaultKeys = /** @type {Array<keyof AngleValidator.CompileOptions>} */
+    (Object.keys(defaultOptions));
+  const struct = new Int32Array(defaultKeys.length);
 
   defaultKeys.forEach(function(optionName, index) {
     const defaultValue = defaultOptions[optionName];
@@ -71,57 +72,66 @@ function constructCompileOptionsStruct(opts) {
     const value = optValue !== undefined ? optValue : defaultValue;
 
     if (typeof defaultValue === 'number') {
-      buffer[index] = Number(value);
+      struct[index] = Number(value);
     } else {
-      buffer[index] = value ? 1 : 0;
+      struct[index] = value ? 1 : 0;
     }
   });
 
-  return buffer;
+  return new Int8Array(struct.buffer);
 }
 
 /**
- * @param {AngleValidator.ShaderInputType} inputType
- * @return {Int32Array}
+ * @param {AngleValidator.ShaderInputType=} inputType
+ * @return {Int8Array}
  */
-function constructInputOptions(inputType) {
-  const inputTypeBuffer = new Int32Array(2);
-  inputTypeBuffer[0] = inputType.spec;
+function constructInputOptionsStruct(inputType) {
+  const inputTypeStruct = new Int32Array(2);
+
+  if (!inputType) {
+    // default to GLES2 if no input specified.
+    inputTypeStruct[0] = INPUT_TYPES.GLES;
+    inputTypeStruct[1] = 2;
+    return new Int8Array(inputTypeStruct.buffer);
+  }
+
+  inputTypeStruct[0] = inputType.spec;
 
   if (inputType.spec === INPUT_TYPES.GLES) {
     // default to GLES 2
-    inputTypeBuffer[1] = inputType.version || 2;
+    inputTypeStruct[1] = inputType.version || 2;
   } else {
     // default to WebGL 1.0
-    inputTypeBuffer[1] = inputType.version || 1;
+    inputTypeStruct[1] = inputType.version || 1;
   }
 
-  return inputTypeBuffer;
+  return new Int8Array(inputTypeStruct.buffer);
 }
 
 /**
  * @param {AngleValidator.ShaderOutputType=} outputType
- * @return {Int32Array}
+ * @return {Int8Array}
  */
-function constructOutputOptions(outputType) {
-  const outputTypeBuffer = new Int32Array(2);
+function constructOutputOptionsStruct(outputType) {
+  const outputTypeStruct = new Int32Array(2);
 
   if (!outputType) {
-    outputTypeBuffer[0] = OUTPUT_TYPES.GLES;
-    return outputTypeBuffer;
+    // default to GLSL ES if no output specified.
+    outputTypeStruct[0] = OUTPUT_TYPES.GLES;
+    return new Int8Array(outputTypeStruct.buffer);
   }
 
-  outputTypeBuffer[0] = outputType.spec;
+  outputTypeStruct[0] = outputType.spec;
 
   if (outputType.spec === OUTPUT_TYPES.GLSL) {
     // default is 0 (compatibility profile)
-    outputTypeBuffer[1] = outputType.version || 2;
+    outputTypeStruct[1] = outputType.version || 2;
   } else if (outputType.spec === OUTPUT_TYPES.HLSL) {
     // default to HLSL 9
-    outputTypeBuffer[1] = outputType.version || 9;
+    outputTypeStruct[1] = outputType.version || 9;
   }
 
-  return outputTypeBuffer;
+  return new Int8Array(outputTypeStruct.buffer);
 }
 
 /**
@@ -139,28 +149,38 @@ Module.locateFile = function(filename) {
   return filename;
 };
 
+// TODO(bckenny): combine shaderType into inputOptions
 /**
  * @param {string} shaderSrc
  * @param {number=} shaderType
- * @param {string} argv
+ * @param {AngleValidator.ShaderInputType=} inputOpts
+ * @param {AngleValidator.ShaderOutputType=} outputOpts
+ * @param {Partial<AngleValidator.CompileOptions>=} compileOpts
  * @return {string} output of validator.
  */
-Module.validateShader = function(shaderSrc, shaderType, argv) {
+Module.validateShader = function(shaderSrc, shaderType, inputOpts, outputOpts, compileOpts) {
   shaderType = shaderType || GL_FRAGMENT_SHADER;
+  compileOpts = compileOpts || {};
 
-  // manually allocate slot for the resulting pointer
+  const inputOptionsStruct = constructInputOptionsStruct(inputOpts);
+  // TODO(bckenny): no output should be just validation? Or do defaults
+  const outputOptionsStuct = constructOutputOptionsStruct(outputOpts);
+  const compileOptionsStruct = constructCompileOptionsStruct(compileOpts);
+
+  // manually allocate slot for resulting pointer to log.
   const printLoc = _malloc(4);
   setValue(printLoc, 0, '*');
 
   ccall('ValidateShader', 'number',
-      ['string', 'number', 'string', 'number'],
-      [shaderSrc, shaderType, argv, printLoc]);
+      ['string', 'number', 'array', 'array', 'array', 'number'],
+      [shaderSrc, shaderType, inputOptionsStruct, outputOptionsStuct,
+        compileOptionsStruct, printLoc]);
 
   const printLogLoc = getValue(printLoc, '*');
   // eslint-disable-next-line new-cap
   const printLog = Pointer_stringify(printLogLoc);
 
-  // responsible for freeing log, if generated
+  // Free log and pointer to it.
   _free(printLoc);
   _free(printLogLoc);
 

@@ -6,4 +6,5 @@
 /out/**
 /test/groundtruth/**
 
+!/test/groundtruth/compare.js
 !.eslintrc.js

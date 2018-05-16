@@ -16,12 +16,39 @@ const headValidatorModule = require('../../out/validator.js');
 const multiviewVert = 'test/groundtruth/shaders/multiview.vert';
 const aqFishFrag = 'test/groundtruth/shaders/aq-fish-nm.frag';
 
+// TODO(bckenny): get from module instead of c/p
+/**
+ * Shared with enum in shader-validator.cpp
+ * @type {AngleValidator.InputType}
+ */
+const INPUT_TYPE = {
+  GLES: 0,
+  WEBGL: 1,
+};
+
+/**
+ * Shared with enum in shader-validator.cpp
+ * @type {AngleValidator.OutputType}
+ */
+const OUTPUT_TYPE = {
+  GLES: 0,
+  GLSL: 1,
+  HLSL: 2,
+};
+
 const GLSL_ES2 = 'e2';
 const GLSL_ES3 = 'e3';
 const GLSL_ES31 = 'e31';
 const WEBGL1 = 'w';
 const WEBGL2 = 'w2';
 const INPUT_TYPES = [GLSL_ES2, GLSL_ES3, GLSL_ES31, WEBGL1, WEBGL2];
+const INPUT_OPTIONS = {
+  [GLSL_ES2]: {spec: INPUT_TYPE.GLES, version: 2},
+  [GLSL_ES3]: {spec: INPUT_TYPE.GLES, version: 3},
+  [GLSL_ES31]: {spec: INPUT_TYPE.GLES, version: 31},
+  [WEBGL1]: {spec: INPUT_TYPE.WEBGL, version: 1},
+  [WEBGL2]: {spec: INPUT_TYPE.WEBGL, version: 2},
+}
 
 const GLSL_ES = 'e';
 const GLSL = 'g';
@@ -31,6 +58,22 @@ const GLSL_VERSIONS = [130, 140, 150, 330, 400, 410, 420, 430, 440, 450].map(ver
 const HLSL9 = 'h9';
 const HLSL11 = 'h11';
 const OUTPUT_TYPES = [GLSL_ES, GLSL, ...GLSL_VERSIONS, HLSL9, HLSL11];
+const OUTPUT_OPTIONS = {
+  [GLSL_ES]: {spec: OUTPUT_TYPE.GLES},
+  [GLSL]: {spec: OUTPUT_TYPE.GLSL, version: 3},
+  g130: {spec: OUTPUT_TYPE.GLSL, version: 130},
+  g140: {spec: OUTPUT_TYPE.GLSL, version: 140},
+  g150: {spec: OUTPUT_TYPE.GLSL, version: 150},
+  g330: {spec: OUTPUT_TYPE.GLSL, version: 330},
+  g400: {spec: OUTPUT_TYPE.GLSL, version: 400},
+  g410: {spec: OUTPUT_TYPE.GLSL, version: 410},
+  g420: {spec: OUTPUT_TYPE.GLSL, version: 420},
+  g430: {spec: OUTPUT_TYPE.GLSL, version: 430},
+  g440: {spec: OUTPUT_TYPE.GLSL, version: 440},
+  g450: {spec: OUTPUT_TYPE.GLSL, version: 450},
+  [HLSL9]: {spec: OUTPUT_TYPE.HLSL, version: 9},
+  [HLSL11]: {spec: OUTPUT_TYPE.HLSL, version: 11},
+}
 
 // eslint-disable-next-line max-len
 const ERROR_LOG_EXTRACT = /#### BEGIN COMPILER 0 INFO LOG ####\n([^]*)\n\n#### END COMPILER 0 INFO LOG ####/;
@@ -51,7 +94,7 @@ const tests = [
     cmd: {
       input: WEBGL2,
       output: GLSL_ES,
-      precisionEmulation: true,
+      use_precision_emulation: true,
     },
     translatedCheck: /^highp float angle_frm\(in highp float x\) {/,
   }, {
@@ -80,7 +123,7 @@ const tests = [
     cmd: {
       input: WEBGL1,
       output: HLSL9,
-      precisionEmulation: true,
+      use_precision_emulation: true,
     },
     errorCheck: /^ERROR: Precision emulation not supported for this output type./,
   }, {
@@ -88,7 +131,7 @@ const tests = [
     cmd: {
       input: WEBGL1,
       output: HLSL11,
-      precisionEmulation: true,
+      use_precision_emulation: true,
     },
     translatedCheck: /^float1 angle_frm\(float1 v\) {\n *v = clamp\(v, -65504\.0, 65504\.0\);/,
   },
@@ -141,14 +184,13 @@ function createArgv(options) {
   }
   args.push('-s=' + inputType);
 
-  // TODO(bckenny): no output should be just validation?
   const outputType = options.output ? options.output : GLSL_ES;
   if (!OUTPUT_TYPES.includes(outputType)) {
     throw new Error(outputType + ' not a supported shader output type');
   }
   args.push('-o', '-b=' + outputType);
 
-  if (options.precisionEmulation) {
+  if (options.use_precision_emulation) {
     args.push('-p');
   }
 
@@ -186,6 +228,25 @@ function createArgv(options) {
   return args.join(' ');
 }
 
+function createOptions(options) {
+  const inputTypeCmd = options.input ? options.input : GLSL_ES2;
+  if (!INPUT_TYPES.includes(inputTypeCmd)) {
+    throw new Error(inputType + ' not a supported shader input type');
+  }
+  const inputOptions = {...INPUT_OPTIONS[inputTypeCmd]};
+  
+  const outputTypeCmd = options.output ? options.output : GLSL_ES;
+  if (!OUTPUT_TYPES.includes(outputTypeCmd)) {
+    throw new Error(outputType + ' not a supported shader output type');
+  }
+  const outputOptions = {...OUTPUT_OPTIONS[outputTypeCmd]};
+
+  // TODO(bckenny): should validate rather than just blindly copy options
+  const compilerOptions = {...options};
+
+  return [inputOptions, outputOptions, compilerOptions];
+}
+
 async function getHeadValidator() {
   return new Promise(resolve => {
     // Note: has then() but not a promise!
@@ -217,7 +278,7 @@ async function runGroundTruthCommand(file, cmd) {
   };
 }
 
-async function runHeadCommand(head, file, cmd) {
+async function runHeadCommand(head, file, inputOpts, outputOpts, compileOpts) {
   const shaderType = file.endsWith('.vert') ?
       head.GL_VERTEX_SHADER : head.GL_FRAGMENT_SHADER;
   const filepath = path.resolve(__dirname, '../../', file);
@@ -227,7 +288,7 @@ async function runHeadCommand(head, file, cmd) {
   } catch (e) {}
 
 
-  const output = head.validateShader(shaderSrc, shaderType, cmd);
+  const output = head.validateShader(shaderSrc, shaderType, inputOpts, outputOpts, compileOpts);
 
   const errorLog = ERROR_LOG_EXTRACT.exec(output);
   const translatedCode = TRANSLATED_EXTRACT.exec(output);
@@ -254,22 +315,27 @@ async function run() {
   const head = await getHeadValidator();
 
   for (const test of tests) {
+    let headOptions = [];
     let headCmd = '';
     let gtCmd = '';
     if (test.cmd) {
       const cmd = createArgv(test.cmd);
       headCmd = cmd;
       gtCmd = cmd;
+      headOptions = createOptions(test.cmd);
       console.log(`checking command \`${cmd} ${test.file}\`...`);
+      // console.log('equivalent options struct: ', JSON.stringify(headOptions));
     } else {
       headCmd = createArgv(test.headCmd);
       gtCmd = createArgv(test.gtCmd);
+      headOptions = createOptions(test.cmd);
 
       console.log(`checking head \`${headCmd} ${test.file}\`...`);
       console.log(`      vs gt \`${gtCmd} ${test.file}\`...`);
+      // console.log('head options struct: ', JSON.stringify(headOptions));
     }
 
-    const headOutput = await runHeadCommand(head, test.file, headCmd);
+    const headOutput = await runHeadCommand(head, test.file, ...headOptions);
     const gtOutput = await runGroundTruthCommand(test.file, gtCmd);
 
     if (!test.errorCheck) {
