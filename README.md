@@ -4,20 +4,23 @@ A working build is shipped in `out/`. Installation and (re)building is only nece
 
 ## Init and Build (Mac/Linux)
 1. `git clone https://github.com/brendankenny/angle-validator.git`
-2. Download, install, and activate the [Emscripten SDK](https://kripken.github.io/emscripten-site/docs/getting_started/downloads.html)
+1. `cd angle-validator/`
+1. Download, install, and activate the [Emscripten SDK](https://kripken.github.io/emscripten-site/docs/getting_started/downloads.html)
     ```sh
     git clone https://github.com/juj/emsdk.git
     ./emsdk/emsdk install latest
     ./emsdk/emsdk activate latest
     ```
-3. `git clone https://chromium.googlesource.com/angle/angle` (TODO: lock version)
-4. `yarn build`
+1. `git clone https://chromium.googlesource.com/angle/angle` (TODO: lock version)
+1. `yarn build`
 
 ## Test
 `yarn test`
+`yarn lint`
+`yarn type-check`
 
 ## Update source list
-Occasionally, will need to regenerate list of source files and compile flags as ANGLE is updated.
+Occasionally, the list of source files and compile flags will need to be regenerated as ANGLE is updated.
 1. Check for changes to shader translator sample
     ```sh
     cd angle
@@ -36,7 +39,7 @@ Occasionally, will need to regenerate list of source files and compile flags as 
     ```
 3. `yarn gen`
 4. Compare to checked-in build config (`git diff build/build-config.json`)
-5. `yarn build` if code or build changes necessitate
+5. `yarn build` if ANGLE or build changes require it
 
 ## Update test expectation binary
 If ANGLE is updated, should update test expectation generator from ANGLE source.
