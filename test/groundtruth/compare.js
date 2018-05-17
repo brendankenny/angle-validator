@@ -338,6 +338,18 @@ async function run() {
     const headOutput = await runHeadCommand(head, test.file, ...headOptions);
     const gtOutput = await runGroundTruthCommand(test.file, gtCmd);
 
+    // HACK: Generated HLSL variable names have changed, so update variable names
+    // TODO: Ideally comparison with GT will be more robust.
+    const replacements = [
+      [/s40f/g, 's892'],
+      [/s3fe/g, 's819'],
+      [/s3ff/g, 's820'],
+    ];
+    let headTranslatedCode = headOutput.translatedCode;
+    for (const replacement of replacements) {
+      headTranslatedCode = headTranslatedCode && headTranslatedCode.replace(...replacement);
+    }
+
     if (!test.errorCheck) {
       assert.strictEqual(headOutput.errorLog, null);
     } else {
@@ -345,14 +357,16 @@ async function run() {
     }
 
     if (!test.translatedCheck) {
-      assert.strictEqual(headOutput.translatedCode, null);
+      assert.strictEqual(headTranslatedCode, null);
     } else {
-      assert(test.translatedCheck.test(headOutput.translatedCode),
+      assert(test.translatedCheck.test(headTranslatedCode),
           `translatedCode failed regex ${test.translatedCheck}`);
     }
 
+    // fs.writeFileSync(__dirname + '/../../gtoutput.hlsl', gtOutput.translatedCode);
+    // fs.writeFileSync(__dirname + '/../../headoutput.hlsl', headTranslatedCode);
     assert.strictEqual(headOutput.errorLog, gtOutput.errorLog);
-    assert.strictEqual(headOutput.translatedCode, gtOutput.translatedCode);
+    assert.strictEqual(headTranslatedCode, gtOutput.translatedCode);
   }
 
   console.log('complete!');
